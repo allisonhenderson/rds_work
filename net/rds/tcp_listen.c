@@ -299,6 +299,7 @@ int rds_tcp_accept_one(struct rds_tcp_net *rtn)
 	} else {
 		rds_tcp_set_callbacks(new_sock, cp);
 		rds_connect_path_complete(cp, RDS_CONN_CONNECTING);
+		wake_up(&cp->cp_up_waitq);
 	}
 
 	/* Since "rds_tcp_set_callbacks" happens this late
