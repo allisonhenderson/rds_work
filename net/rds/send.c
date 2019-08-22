@@ -1305,6 +1305,7 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 	if (rs->rs_conn && ipv6_addr_equal(&rs->rs_conn->c_faddr, &daddr) &&
 	    rs->rs_tos == rs->rs_conn->c_tos) {
 		conn = rs->rs_conn;
+		cpath = rs->rs_conn_path;
 	} else {
 		conn = rds_conn_create_outgoing(sock_net(sock->sk),
 						&rs->rs_bound_addr, &daddr,
@@ -1315,16 +1316,33 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 			ret = PTR_ERR(conn);
 			goto out;
 		}
-		rs->rs_conn = conn;
-	}
+		if (conn->c_trans->t_mp_capable) {
+			/* c_npaths == 0 if we have not talked to this peer
+			 * before.  Initiate a connection request to the
+			 * peer right away.
+			 */
+			if (!conn->c_npaths &&
+			    rds_conn_path_down(&conn->c_path[0])) {
+				/* Ensures that only one request is queued.  And
+				 * rds_send_ping() ensures that only one ping is
+				 * outstanding.
+				 */
+				if (!test_and_set_bit(RDS_RECONNECT_PENDING,
+						      &conn->c_path[0].cp_flags))
+					queue_delayed_work(conn->c_path[0].cp_wq,
+							   &conn->c_path[0].cp_conn_w, 0);
+				rds_send_ping(conn, 0);
+			}
 
-	if (conn->c_trans->t_mp_capable) {
-		/* Use c_path[0] until we learn that
-		 * the peer supports more (c_npaths > 1)
-		 */
-		cpath = &conn->c_path[RDS_MPATH_HASH(rs, conn->c_npaths ? : 1)];
-	} else {
-		cpath = &conn->c_path[0];
+			/* Use c_path[0] until we learn that
+			 * the peer supports more (c_npaths > 1)
+			 */
+			cpath = &conn->c_path[RDS_MPATH_HASH(rs, conn->c_npaths ? : 1)];
+		} else {
+			cpath = &conn->c_path[0];
+		}
+		rs->rs_conn = conn;
+		rs->rs_conn_path = cpath;
 	}
 
 	rm->m_conn_path = cpath;
@@ -1354,7 +1372,7 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 	}
 
 	if (rds_conn_path_down(cpath))
-		rds_check_all_paths(conn);
+		rds_conn_path_connect_if_down(cpath);
 
 	ret = rds_cong_wait(conn->c_fcong, dport, nonblock, rs);
 	if (ret) {
