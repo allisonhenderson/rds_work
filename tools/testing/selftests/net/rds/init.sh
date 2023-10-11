@@ -1,0 +1,22 @@
+#! /bin/bash
+
+set -e
+set -u
+set -x
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t tmpfs none /tmp
+mount -t tmpfs none /var/run
+mount -t debugfs none /sys/kernel/debug
+
+python3 "$(dirname "$0")/test.py" || true
+#strace -f -e trace=socketpair,sendmsg,recvmsg /usr/bin/python3 "$(dirname $0)/tools/testing/selftests/net/rds/test.py" || true
+
+(set +x; cd /sys/kernel/debug/gcov; find -name '*.gcda' | \
+while read f
+do
+	cp /sys/kernel/debug/gcov/$f /$f
+done)
+
+/usr/sbin/poweroff --no-wtmp --force
