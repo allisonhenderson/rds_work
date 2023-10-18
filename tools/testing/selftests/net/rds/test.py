@@ -2,6 +2,7 @@
 
 import argparse
 import ctypes
+import hashlib
 import os
 import signal
 import socket
@@ -42,6 +43,7 @@ def netns_socket(netns, *args):
     return socket.fromfd(s[0], *args)
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--timeout', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -79,8 +81,24 @@ subprocess.check_call(['/usr/sbin/ip', '-n', net1, 'route', 'add', addrs[0][0] +
 # and communicating by doing a single ping
 subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net0, 'ping', '-c', '1', addrs[1][0]])
 
+# simulate packet loss, reordering, corruption, etc.
+
+if True:
+    #subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net0,
+    #    '/usr/sbin/tc', 'qdisc', 'add', 'dev', veth0, 'root', 'netem', 'loss', '10%'])
+
+    for net, iface in [(net0, veth0), (net1, veth1)]:
+        subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net,
+            '/usr/sbin/tc', 'qdisc', 'add', 'dev', iface, 'root', 'netem',
+            'reorder', '50%',
+            'gap', '5',
+            'delay', '10ms',
+            'corrupt', '25%',
+        ])
+
 # add a timeout
-signal.alarm(5)
+if args.timeout > 0:
+    signal.alarm(args.timeout)
 
 sockets = [
     netns_socket(net0, socket.AF_RDS, socket.SOCK_SEQPACKET),
@@ -90,15 +108,24 @@ sockets = [
 sockets[0].bind(addrs[0])
 sockets[1].bind(addrs[1])
 
-send_data = f'Hello world'.encode('utf-8')
+#sockets[0].setblocking(0)
 
-#sockets[0].sendto(send_data, socket.MSG_DONTWAIT, addrs[1])
-sockets[0].sendto(send_data, addrs[1])
+send_hash = hashlib.sha256()
+recv_hash = hashlib.sha256()
 
-recv_data = sockets[1].recv(1024)
+for i in range(500):
+    send_data = f'packet {i}'.encode('utf-8')
 
-if send_data != recv_data:
-	print("Data mismatch:")
-	print(send_data)
-	print(recv_data)
-	sys.exit(1)
+    #sockets[0].sendto(send_data, socket.MSG_DONTWAIT, addrs[1])
+    sockets[0].sendto(send_data, addrs[1])
+    send_hash.update(f'packet {i}: {send_data}'.encode('utf-8'))
+
+for i in range(500):
+    recv_data = sockets[1].recv(1024)
+    recv_hash.update(f'packet {i}: {recv_data}'.encode('utf-8'))
+
+if send_hash.hexdigest() == recv_hash.hexdigest():
+    print("Success")
+else:
+    print("Send/recv hash mismatch")
+    sys.exit(1)
