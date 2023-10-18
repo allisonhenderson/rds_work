@@ -23,5 +23,8 @@ scripts/config --enable GCOV_PROFILE_RDS
 scripts/config --enable CONFIG_NET_NS
 scripts/config --enable CONFIG_VETH
 
+# simulate packet loss
+scripts/config --enable CONFIG_NET_SCH_NETEM
+
 # generate real .config without asking any questions
 make olddefconfig
