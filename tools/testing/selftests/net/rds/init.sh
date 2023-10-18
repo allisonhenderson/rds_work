@@ -2,7 +2,7 @@
 
 set -e
 set -u
-set -x
+#set -x
 
 mount -t proc none /proc
 mount -t sysfs none /sys
@@ -10,9 +10,11 @@ mount -t tmpfs none /tmp
 mount -t tmpfs none /var/run
 mount -t debugfs none /sys/kernel/debug
 
-python3 "$(dirname "$0")/test.py" || true
+echo running RDS tests...
+time python3 "$(dirname "$0")/test.py" || true
 #strace -f -e trace=socketpair,sendmsg,recvmsg /usr/bin/python3 "$(dirname $0)/tools/testing/selftests/net/rds/test.py" || true
 
+echo saving coverage data...
 (set +x; cd /sys/kernel/debug/gcov; find -name '*.gcda' | \
 while read f
 do
