@@ -4,6 +4,7 @@ import argparse
 import ctypes
 import hashlib
 import os
+import select
 import signal
 import socket
 import subprocess
@@ -59,6 +60,8 @@ subprocess.check_call(['/usr/sbin/ip', 'netns', 'add', net1])
 subprocess.check_call(['/usr/sbin/ip', 'link', 'add', 'type', 'veth'])
 
 addrs = [
+    # we technically don't need different port numbers, but let's do it
+    # in case it makes debugging problems easier somehow.
     ('10.0.0.1', 10000),
     ('10.0.0.2', 20000),
 ]
@@ -105,27 +108,69 @@ sockets = [
     netns_socket(net1, socket.AF_RDS, socket.SOCK_SEQPACKET),
 ]
 
-sockets[0].bind(addrs[0])
-sockets[1].bind(addrs[1])
+for socket, addr in zip(sockets, addrs):
+    socket.bind(addr)
+    socket.setblocking(0)
 
-#sockets[0].setblocking(0)
+fileno_to_socket = {
+    socket.fileno(): socket for socket in sockets
+}
 
-send_hash = hashlib.sha256()
-recv_hash = hashlib.sha256()
+addr_to_socket = {
+    addr: socket for addr, socket in zip(addrs, sockets)
+}
 
+socket_to_addr = {
+    socket: addr for addr, socket in zip(addrs, sockets)
+}
+
+send_hashes = {}
+recv_hashes = {}
+
+ep = select.epoll()
+
+for socket in sockets:
+    ep.register(socket, select.EPOLLRDNORM)
+
+# Send phase
+
+nr_send = 0
 for i in range(500):
-    send_data = f'packet {i}'.encode('utf-8')
+    send_data = hashlib.sha256(f'packet {i}'.encode('utf-8')).hexdigest().encode('utf-8')
 
-    #sockets[0].sendto(send_data, socket.MSG_DONTWAIT, addrs[1])
-    sockets[0].sendto(send_data, addrs[1])
-    send_hash.update(f'packet {i}: {send_data}'.encode('utf-8'))
+    # pseudo-random send/receive pattern
+    sender = sockets[i % 2]
+    receiver = sockets[1 - (i % 3) % 2]
 
-for i in range(500):
-    recv_data = sockets[1].recv(1024)
-    recv_hash.update(f'packet {i}: {recv_data}'.encode('utf-8'))
+    sender.sendto(send_data, socket_to_addr[receiver])
+    send_hashes.setdefault((sender.fileno(), receiver.fileno()), hashlib.sha256()).update(f'<{send_data}>'.encode('utf-8'))
+    nr_send = nr_send + 1
 
-if send_hash.hexdigest() == recv_hash.hexdigest():
-    print("Success")
-else:
-    print("Send/recv hash mismatch")
-    sys.exit(1)
+# Receive phase
+
+nr_recv = 0
+while nr_recv < nr_send:
+    for fileno, eventmask in ep.poll():
+        if eventmask & select.EPOLLRDNORM:
+            try:
+                receiver = fileno_to_socket[fileno]
+                recv_data, address = receiver.recvfrom(1024)
+                sender = addr_to_socket[address]
+                recv_hashes.setdefault((sender.fileno(), receiver.fileno()), hashlib.sha256()).update(f'<{recv_data}>'.encode('utf-8'))
+                nr_recv = nr_recv + 1
+            except BlockingIOError as e:
+                pass
+
+# We're done sending and receiving stuff, now let's check if what
+# we received is what we sent.
+
+for (sender, receiver), send_hash in send_hashes.items():
+    recv_hash = recv_hashes.get((sender, receiver))
+
+    if recv_hash is None or send_hash.hexdigest() != recv_hash.hexdigest():
+        print("Send/recv mismatch")
+        sys.exit(1)
+
+    print(f"{sender}/{receiver}: ok")
+
+print("Success")
