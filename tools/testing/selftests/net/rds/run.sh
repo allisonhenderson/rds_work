@@ -2,15 +2,29 @@
 
 set -e
 set -u
-set -x
 
 here="$(realpath "$(dirname "$0")")"
+
+find_qemu() {
+	# some systems have qemu/kvm in a weird location
+	# let's just try a few different ones
+
+	for qemu in qemu-system-x86_64 kvm /usr/libexec/qemu-kvm
+	do
+		command -v $qemu && return
+	done
+
+	echo "error: qemu not found" >&2
+	exit 1
+}
+
+qemu=$(find_qemu)
 
 # start a VM using a 9P root filesystem that maps to the host's /
 # we pass ./init.sh from the same directory as we are in as the
 # guest's init, which will run the tests and copy the coverage
 # data back to the host filesystem.
-/usr/libexec/qemu-kvm \
+$qemu \
 	-enable-kvm \
 	-cpu host \
 	-kernel arch/x86/boot/bzImage \
@@ -22,4 +36,5 @@ here="$(realpath "$(dirname "$0")")"
 	-no-reboot
 
 # generate a nice HTML coverage report
+echo running gcovr...
 gcovr --html-details -o coverage/ net/rds/
