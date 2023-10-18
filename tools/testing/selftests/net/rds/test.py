@@ -54,10 +54,12 @@ net1 = 'net1'
 veth0 = 'veth0'
 veth1 = 'veth1'
 
-subprocess.check_call(['/usr/sbin/ip', 'netns', 'add', net0])
-subprocess.check_call(['/usr/sbin/ip', 'netns', 'add', net1])
+def ip(*args):
+    subprocess.check_call(['/usr/sbin/ip'] + list(args))
 
-subprocess.check_call(['/usr/sbin/ip', 'link', 'add', 'type', 'veth'])
+ip('netns', 'add', net0)
+ip('netns', 'add', net1)
+ip('link', 'add', 'type', 'veth')
 
 addrs = [
     # we technically don't need different port numbers, but let's do it
@@ -69,20 +71,20 @@ addrs = [
 # move interfaces to separate namespaces so they can no longer be
 # bound directly; this prevents rds from switching over from the tcp
 # transport to the loop transport.
-subprocess.check_call(['/usr/sbin/ip', 'link', 'set', veth0, 'netns', net0, 'up'])
-subprocess.check_call(['/usr/sbin/ip', 'link', 'set', veth1, 'netns', net1, 'up'])
+ip('link', 'set', veth0, 'netns', net0, 'up')
+ip('link', 'set', veth1, 'netns', net1, 'up')
 
 # add addresses
-subprocess.check_call(['/usr/sbin/ip', '-n', net0, 'addr', 'add', addrs[0][0] + '/32', 'dev', veth0])
-subprocess.check_call(['/usr/sbin/ip', '-n', net1, 'addr', 'add', addrs[1][0] + '/32', 'dev', veth1])
+ip('-n', net0, 'addr', 'add', addrs[0][0] + '/32', 'dev', veth0)
+ip('-n', net1, 'addr', 'add', addrs[1][0] + '/32', 'dev', veth1)
 
 # add routes
-subprocess.check_call(['/usr/sbin/ip', '-n', net0, 'route', 'add', addrs[1][0] + '/32', 'dev', veth0])
-subprocess.check_call(['/usr/sbin/ip', '-n', net1, 'route', 'add', addrs[0][0] + '/32', 'dev', veth1])
+ip('-n', net0, 'route', 'add', addrs[1][0] + '/32', 'dev', veth0)
+ip('-n', net1, 'route', 'add', addrs[0][0] + '/32', 'dev', veth1)
 
 # sanity check that our two interfaces/addresses are correctly set up
 # and communicating by doing a single ping
-subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net0, 'ping', '-c', '1', addrs[1][0]])
+ip('netns', 'exec', net0, 'ping', '-c', '1', addrs[1][0])
 
 # simulate packet loss, reordering, corruption, etc.
 
@@ -91,13 +93,13 @@ if True:
     #    '/usr/sbin/tc', 'qdisc', 'add', 'dev', veth0, 'root', 'netem', 'loss', '10%'])
 
     for net, iface in [(net0, veth0), (net1, veth1)]:
-        subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net,
+        ip('netns', 'exec', net,
             '/usr/sbin/tc', 'qdisc', 'add', 'dev', iface, 'root', 'netem',
             'reorder', '50%',
             'gap', '5',
             'delay', '10ms',
             'corrupt', '25%',
-        ])
+        )
 
 # add a timeout
 if args.timeout > 0:
