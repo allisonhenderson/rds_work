@@ -2,6 +2,7 @@
 
 import argparse
 import ctypes
+import errno
 import hashlib
 import os
 import select
@@ -86,19 +87,30 @@ ip('-n', net1, 'route', 'add', addrs[0][0] + '/32', 'dev', veth1)
 # and communicating by doing a single ping
 ip('netns', 'exec', net0, 'ping', '-c', '1', addrs[1][0])
 
+if True:
+    # debugging aid: capture packets
+    for net in [net0, net1]:
+        child = os.fork()
+        if child == 0:
+            ip('netns', 'exec', net, 'tcpdump', '-Z', 'vegard', '-i', 'any', '-w', f'/home/vegard/{net}.pcap')
+            sys.exit(0)
+
 # simulate packet loss, reordering, corruption, etc.
 
 if True:
     #subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net0,
     #    '/usr/sbin/tc', 'qdisc', 'add', 'dev', veth0, 'root', 'netem', 'loss', '10%'])
 
+    # See: <https://man7.org/linux/man-pages/man8/tc-netem.8.html>
     for net, iface in [(net0, veth0), (net1, veth1)]:
         ip('netns', 'exec', net,
             '/usr/sbin/tc', 'qdisc', 'add', 'dev', iface, 'root', 'netem',
-            'reorder', '50%',
-            'gap', '5',
-            'delay', '10ms',
-            'corrupt', '25%',
+            #'reorder', '10%',
+            #'gap', '5',
+            #'delay', '1ms', '1ms', '1%',
+            'corrupt', '5%',
+            'loss', '5%',
+            'duplicate', '5%',
         )
 
 # add a timeout
@@ -110,20 +122,20 @@ sockets = [
     netns_socket(net1, socket.AF_RDS, socket.SOCK_SEQPACKET),
 ]
 
-for socket, addr in zip(sockets, addrs):
-    socket.bind(addr)
-    socket.setblocking(0)
+for s, addr in zip(sockets, addrs):
+    s.bind(addr)
+    s.setblocking(0)
 
 fileno_to_socket = {
-    socket.fileno(): socket for socket in sockets
+    s.fileno(): s for s in sockets
 }
 
 addr_to_socket = {
-    addr: socket for addr, socket in zip(addrs, sockets)
+    addr: s for addr, s in zip(addrs, sockets)
 }
 
 socket_to_addr = {
-    socket: addr for addr, socket in zip(addrs, sockets)
+    s: addr for addr, s in zip(addrs, sockets)
 }
 
 send_hashes = {}
@@ -131,38 +143,85 @@ recv_hashes = {}
 
 ep = select.epoll()
 
-for socket in sockets:
-    ep.register(socket, select.EPOLLRDNORM)
+for s in sockets:
+    ep.register(s, select.EPOLLRDNORM)
 
-# Send phase
+n = 50000
+#n = 500
 
 nr_send = 0
-for i in range(500):
-    send_data = hashlib.sha256(f'packet {i}'.encode('utf-8')).hexdigest().encode('utf-8')
-
-    # pseudo-random send/receive pattern
-    sender = sockets[i % 2]
-    receiver = sockets[1 - (i % 3) % 2]
-
-    sender.sendto(send_data, socket_to_addr[receiver])
-    send_hashes.setdefault((sender.fileno(), receiver.fileno()), hashlib.sha256()).update(f'<{send_data}>'.encode('utf-8'))
-    nr_send = nr_send + 1
-
-# Receive phase
-
 nr_recv = 0
-while nr_recv < nr_send:
-    for fileno, eventmask in ep.poll():
-        if eventmask & select.EPOLLRDNORM:
-            try:
-                receiver = fileno_to_socket[fileno]
-                recv_data, address = receiver.recvfrom(1024)
-                sender = addr_to_socket[address]
-                recv_hashes.setdefault((sender.fileno(), receiver.fileno()), hashlib.sha256()).update(f'<{recv_data}>'.encode('utf-8'))
-                nr_recv = nr_recv + 1
-            except BlockingIOError as e:
+
+while nr_send < n:
+    # Send as much as we can without blocking
+    print("sending...", nr_send, nr_recv)
+    while nr_send < n:
+        send_data = hashlib.sha256(f'packet {nr_send}'.encode('utf-8')).hexdigest().encode('utf-8')
+
+        # pseudo-random send/receive pattern
+        sender = sockets[nr_send % 2]
+        receiver = sockets[1 - (nr_send % 3) % 2]
+
+        try:
+            sender.sendto(send_data, socket_to_addr[receiver])
+            send_hashes.setdefault((sender.fileno(), receiver.fileno()), hashlib.sha256()).update(f'<{send_data}>'.encode('utf-8'))
+            nr_send = nr_send + 1
+        except BlockingIOError as e:
+            break
+        except OSError as e:
+            if e.errno in [errno.ENOBUFS, errno.ECONNRESET, errno.EPIPE]:
+                break
+            raise
+
+    # Receive as much as we can without blocking
+    print("receiving...", nr_send, nr_recv)
+    while nr_recv < nr_send:
+        #print("poll", nr_send, nr_recv)
+        for fileno, eventmask in ep.poll():
+        #for fileno in fileno_to_socket.keys():
+            receiver = fileno_to_socket[fileno]
+
+            if eventmask & select.EPOLLRDNORM:
+            #if True:
+                while True:
+                    #print("recv", nr_send, nr_recv)
+                    try:
+                        recv_data, address = receiver.recvfrom(1024)
+                        sender = addr_to_socket[address]
+                        recv_hashes.setdefault((sender.fileno(), receiver.fileno()), hashlib.sha256()).update(f'<{recv_data}>'.encode('utf-8'))
+                        nr_recv = nr_recv + 1
+                    except BlockingIOError as e:
+                        break
+
+    # exercise net/rds/tcp.c:rds_tcp_sysctl_reset()
+    for net in [net0, net1]:
+        ip('netns', 'exec', net, '/usr/sbin/sysctl', 'net.rds.tcp.rds_tcp_rcvbuf=10000')
+        ip('netns', 'exec', net, '/usr/sbin/sysctl', 'net.rds.tcp.rds_tcp_sndbuf=10000')
+
+print("done", nr_send, nr_recv)
+
+# the Python socket module doesn't know these
+RDS_INFO_FIRST = 10000
+RDS_INFO_LAST = 10017
+
+nr_success = 0
+nr_error = 0
+
+for s in sockets:
+    for optname in range(RDS_INFO_FIRST, RDS_INFO_LAST + 1):
+        # Sigh, the Python socket module doesn't allow us to pass
+        # buffer lengths greater than 1024 for some reason. RDS
+        # wants multiple pages.
+        try:
+            s.getsockopt(socket.SOL_RDS, optname, 1024)
+            nr_success = nr_success + 1
+        except OSError as e:
+            nr_error = nr_error + 1
+            if e.errno == errno.ENOSPC:
+                # ignore
                 pass
 
+print(f"getsockopt(): {nr_success}/{nr_error}")
 # We're done sending and receiving stuff, now let's check if what
 # we received is what we sent.
 

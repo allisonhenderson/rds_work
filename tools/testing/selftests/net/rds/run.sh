@@ -27,6 +27,7 @@ qemu=$(find_qemu)
 $qemu \
 	-enable-kvm \
 	-cpu host \
+	-smp 4 \
 	-kernel arch/x86/boot/bzImage \
 	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw console=ttyS0 init=${here}/init.sh" \
 	-display none \
