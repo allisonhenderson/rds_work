@@ -10,9 +10,22 @@ import signal
 import socket
 import subprocess
 import sys
+import atexit
+from pwd import getpwuid
+from os import stat
 
 libc = ctypes.cdll.LoadLibrary('libc.so.6')
 setns = libc.setns
+
+net0 = 'net0'
+net1 = 'net1'
+
+veth0 = 'veth0'
+veth1 = 'veth1'
+
+# Convenience wrapper function for calling the subsystem ip command.
+def ip(*args):
+    subprocess.check_call(['/usr/sbin/ip'] + list(args))
 
 # Helper function for creating a socket inside a network namespace.
 # We need this because otherwise RDS will detect that the two TCP
@@ -25,8 +38,11 @@ def netns_socket(netns, *args):
     if child == 0:
         # change network namespace
         with open(f'/var/run/netns/{netns}') as f:
-            ret = setns(f.fileno(), 0)
-            # TODO: check ret
+            try:
+                ret = setns(f.fileno(), 0)
+            except IOError as e:
+                print(e.errno)
+                print(e)
 
         # create socket in target namespace
         s = socket.socket(*args)
@@ -34,7 +50,6 @@ def netns_socket(netns, *args):
         # send resulting socket to parent
         socket.send_fds(u0, [], [s.fileno()])
 
-        #os._exit(0)
         sys.exit(0)
 
     # receive socket from child
@@ -44,27 +59,22 @@ def netns_socket(netns, *args):
     u1.close()
     return socket.fromfd(s[0], *args)
 
-parser = argparse.ArgumentParser()
+#Parse out command line arguments.  We take an optional
+# timeout parameter and an optional log output folder
+parser = argparse.ArgumentParser(description="init script args",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("-d", "--logdir", action="store", help="directory to store logs", default="/tmp")
 parser.add_argument('--timeout', type=int, default=0)
-
 args = parser.parse_args()
-
-net0 = 'net0'
-net1 = 'net1'
-
-veth0 = 'veth0'
-veth1 = 'veth1'
-
-def ip(*args):
-    subprocess.check_call(['/usr/sbin/ip'] + list(args))
+logdir=args.logdir
 
 ip('netns', 'add', net0)
 ip('netns', 'add', net1)
 ip('link', 'add', 'type', 'veth')
 
 addrs = [
-    # we technically don't need different port numbers, but let's do it
-    # in case it makes debugging problems easier somehow.
+    # we technically don't need different port numbers, but this will
+    # help identify traffic in the network analyzer
     ('10.0.0.1', 10000),
     ('10.0.0.2', 20000),
 ]
@@ -87,31 +97,24 @@ ip('-n', net1, 'route', 'add', addrs[0][0] + '/32', 'dev', veth1)
 # and communicating by doing a single ping
 ip('netns', 'exec', net0, 'ping', '-c', '1', addrs[1][0])
 
-if True:
-    # debugging aid: capture packets
-    for net in [net0, net1]:
-        child = os.fork()
-        if child == 0:
-            ip('netns', 'exec', net, 'tcpdump', '-Z', 'vegard', '-i', 'any', '-w', f'/home/vegard/{net}.pcap')
-            sys.exit(0)
+# Start a packet capture on each network
+for net in [net0, net1]:
+    tcpdump_pid = os.fork()
+    if tcpdump_pid == 0:
+        pcap = logdir+'/'+net+'.pcap'
+        subprocess.check_call(['touch', pcap])
+        user = getpwuid(stat(pcap).st_uid).pw_name
+        ip('netns', 'exec', net, '/usr/sbin/tcpdump', '-Z', user, '-i', 'any', '-w', pcap)
+        sys.exit(0)
 
-# simulate packet loss, reordering, corruption, etc.
-
-if True:
-    #subprocess.check_call(['/usr/sbin/ip', 'netns', 'exec', net0,
-    #    '/usr/sbin/tc', 'qdisc', 'add', 'dev', veth0, 'root', 'netem', 'loss', '10%'])
-
-    # See: <https://man7.org/linux/man-pages/man8/tc-netem.8.html>
-    for net, iface in [(net0, veth0), (net1, veth1)]:
-        ip('netns', 'exec', net,
-            '/usr/sbin/tc', 'qdisc', 'add', 'dev', iface, 'root', 'netem',
-            #'reorder', '10%',
-            #'gap', '5',
-            #'delay', '1ms', '1ms', '1%',
-            'corrupt', '5%',
-            'loss', '5%',
-            'duplicate', '5%',
-        )
+# simulate packet loss, duplication and corruption
+for net, iface in [(net0, veth0), (net1, veth1)]:
+    ip('netns', 'exec', net,
+        '/usr/sbin/tc', 'qdisc', 'add', 'dev', iface, 'root', 'netem',
+        'corrupt', '5%',
+        'loss', '5%',
+        'duplicate', '5%',
+    )
 
 # add a timeout
 if args.timeout > 0:
@@ -147,8 +150,6 @@ for s in sockets:
     ep.register(s, select.EPOLLRDNORM)
 
 n = 50000
-#n = 500
-
 nr_send = 0
 nr_recv = 0
 
@@ -176,15 +177,11 @@ while nr_send < n:
     # Receive as much as we can without blocking
     print("receiving...", nr_send, nr_recv)
     while nr_recv < nr_send:
-        #print("poll", nr_send, nr_recv)
         for fileno, eventmask in ep.poll():
-        #for fileno in fileno_to_socket.keys():
             receiver = fileno_to_socket[fileno]
 
             if eventmask & select.EPOLLRDNORM:
-            #if True:
                 while True:
-                    #print("recv", nr_send, nr_recv)
                     try:
                         recv_data, address = receiver.recvfrom(1024)
                         sender = addr_to_socket[address]
@@ -222,14 +219,23 @@ for s in sockets:
                 pass
 
 print(f"getsockopt(): {nr_success}/{nr_error}")
+
+print("Stopping network packet captures")
+subprocess.check_call(['killall', '-q', 'tcpdump'])
+
 # We're done sending and receiving stuff, now let's check if what
 # we received is what we sent.
-
 for (sender, receiver), send_hash in send_hashes.items():
     recv_hash = recv_hashes.get((sender, receiver))
 
-    if recv_hash is None or send_hash.hexdigest() != recv_hash.hexdigest():
-        print("Send/recv mismatch")
+    if recv_hash is None:
+        print("FAIL: No data recieved")
+        sys.exit(1)
+
+    if send_hash.hexdigest() != recv_hash.hexdigest():
+        print("FAIL: Send/recv mismatch")
+        print("hash expected:", send_hash.hexdigest())
+        print("hash received:", recv_hash.hexdigest())
         sys.exit(1)
 
     print(f"{sender}/{receiver}: ok")
