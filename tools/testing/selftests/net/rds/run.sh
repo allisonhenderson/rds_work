@@ -54,6 +54,11 @@ check_env()
 }
 
 check_env
+
+#if we are running in a python environment, we need to capture that
+#python bin so we can use the same python environment in the vm
+PY_CMD=`which python3`
+
 LOG_DIR=/tmp/rds_logs
 mkdir -p  $LOG_DIR
 
@@ -66,7 +71,7 @@ $QEMU_BINARY \
 	-cpu host \
 	-smp 4 \
 	-kernel arch/x86/boot/bzImage \
-	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR}" \
+	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD}" \
 	-display none \
 	-serial stdio \
 	-fsdev local,id=fsdev0,path=/,security_model=none \

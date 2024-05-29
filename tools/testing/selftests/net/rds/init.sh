@@ -4,13 +4,17 @@ set -e
 set -u
 
 LOG_DIR=/tmp
-while getopts "d:" opt; do
+PY_CMD="/usr/bin/python3"
+while getopts "d:p:" opt; do
   case ${opt} in
     d)
       LOG_DIR=${OPTARG}
       ;;
+    p)
+      PY_CMD=${OPTARG}
+      ;;
     :)
-      echo "USAGE: init.sh [-d logdir]"
+      echo "USAGE: init.sh [-d logdir] [-p python_cmd]"
       exit 1
       ;;
     ?)
@@ -30,7 +34,7 @@ mount -t debugfs none /sys/kernel/debug
 echo running RDS tests...
 echo Traces will be logged to $LOG_FILE
 rm -f $LOG_FILE
-strace -o "$LOG_FILE" /usr/bin/python3 $(dirname "$0")/test.py -d "$LOG_DIR" || true
+strace -o "$LOG_FILE" $PY_CMD $(dirname "$0")/test.py -d "$LOG_DIR" || true
 
 echo saving coverage data...
 (set +x; cd /sys/kernel/debug/gcov; find -name '*.gcda' | \
