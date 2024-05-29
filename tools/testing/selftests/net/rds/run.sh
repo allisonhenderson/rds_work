@@ -54,7 +54,7 @@ check_env()
 }
 
 check_env
-LOG_DIR=/tmp/rds-log_$(date -d "today" +"%Y%m%d%H%M%S")
+LOG_DIR=/tmp/rds_logs
 mkdir -p  $LOG_DIR
 
 # start a VM using a 9P root filesystem that maps to the host's /
