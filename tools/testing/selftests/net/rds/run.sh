@@ -20,26 +20,22 @@ esac
 # Kselftest framework requirement - SKIP code is 4.
 check_env()
 {
-	which tcpdump &>/dev/null
-	if [ $? -ne 0 ];then
+	if ! which tcpdump > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without tcpdump"
 		exit 4
 	fi
 
-	which gcovr &>/dev/null
-	if [ $? -ne 0 ];then
+	if ! which gcovr > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without gcovr"
 		exit 4
 	fi
 
-	which $QEMU_BINARY &>/dev/null
-	if [ $? -ne 0 ];then
+	if ! which $QEMU_BINARY > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without qemu"
 		exit 4
 	fi
 
-	which python3 &>/dev/null
-	if [ $? -ne 0 ];then
+	if ! which python3 > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without python3"
 		exit 4
 	fi
