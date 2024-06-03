@@ -3,6 +3,8 @@
 set -e
 set -u
 
+unset KBUILD_OUTPUT
+
 current_dir="$(realpath "$(dirname "$0")")"
 
 # This script currently only works for x86_64
