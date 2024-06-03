@@ -37,10 +37,10 @@ rm -f $LOG_FILE
 strace -o "$LOG_FILE" $PY_CMD $(dirname "$0")/test.py -d "$LOG_DIR" || true
 
 echo saving coverage data...
-(set +x; cd /sys/kernel/debug/gcov; find -name '*.gcda' | \
+(set +x; cd /sys/kernel/debug/gcov; find * -name '*.gcda' | \
 while read f
 do
-	cp /sys/kernel/debug/gcov/$f /$f
+	cat < /sys/kernel/debug/gcov/$f > /$f
 done)
 
 dmesg > $LOG_DIR/dmesg.out
