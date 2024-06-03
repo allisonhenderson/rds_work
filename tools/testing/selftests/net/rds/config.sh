@@ -4,6 +4,8 @@ set -e
 set -u
 set -x
 
+unset KBUILD_OUTPUT
+
 # start with a default config
 make defconfig
 
