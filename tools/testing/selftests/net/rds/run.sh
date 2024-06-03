@@ -70,7 +70,7 @@ $QEMU_BINARY \
 	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD}" \
 	-display none \
 	-serial stdio \
-	-fsdev local,id=fsdev0,path=/,security_model=none \
+	-fsdev local,id=fsdev0,path=/,security_model=none,multidevs=remap \
 	-device virtio-9p-pci,fsdev=fsdev0,mount_tag=/dev/root \
 	-no-reboot
 
