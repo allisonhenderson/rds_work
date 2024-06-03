@@ -22,6 +22,10 @@ esac
 # Kselftest framework requirement - SKIP code is 4.
 check_env()
 {
+	if ! which strace > /dev/null 2>&1; then
+		echo "selftests: [SKIP] Could not run test without strace"
+		exit 4
+	fi
 	if ! which tcpdump > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without tcpdump"
 		exit 4
