@@ -11,12 +11,12 @@ current_dir="$(realpath "$(dirname "$0")")"
 ARCH="$(uname -m)"
 case "${ARCH}" in
 x86_64)
-        QEMU_BINARY=qemu-system-x86_64
-        ;;
+	QEMU_BINARY=qemu-system-x86_64
+	;;
 *)
-        echo "Unsupported architecture"
-        exit 4
-        ;;
+	echo "selftests: [SKIP] Unsupported architecture"
+	exit 4
+	;;
 esac
 
 # Kselftest framework requirement - SKIP code is 4.
