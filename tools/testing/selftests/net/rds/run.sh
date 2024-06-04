@@ -22,6 +22,7 @@ fi
 # Locate the top level of the kernel source, and the net/rds
 # subfolder with the appropriate *.gcno object files
 ksrc_dir="$(realpath $build_dir/../../../../../)"
+kconfig="$ksrc_dir/.config"
 obj_dir="$ksrc_dir/net/rds"
 
 # This script currently only works for x86_64
@@ -37,10 +38,40 @@ x86_64)
 esac
 
 # Kselftest framework requirement - SKIP code is 4.
+check_conf_enabled() {
+	if ! grep -x "$1=y" $kconfig > /dev/null 2>&1; then
+		echo selftests: [SKIP] This test requires $1 enabled
+		echo Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel
+		exit 4
+	fi
+}
+check_conf_disabled() {
+	if grep -x "$1=y" $kconfig > /dev/null 2>&1; then
+		echo selftests: [SKIP] This test requires $1 disabled
+		echo Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel
+		exit 4
+	fi
+}
+check_conf() {
+	check_conf_enabled CONFIG_NET_SCH_NETEM
+	check_conf_enabled CONFIG_VETH
+	check_conf_enabled CONFIG_NET_NS
+	check_conf_enabled CONFIG_GCOV_PROFILE_RDS
+	check_conf_enabled CONFIG_GCOV_KERNEL
+	check_conf_enabled CONFIG_RDS_TCP
+	check_conf_enabled CONFIG_RDS
+	check_conf_disabled CONFIG_MODULES
+	check_conf_disabled CONFIG_GCOV_PROFILE_ALL
+}
+
 check_env()
 {
 	if ! test -d $obj_dir; then
 		echo "selftests: [SKIP] This test requires a kernel source tree"
+		exit 4
+	fi
+	if ! test -e $kconfig; then
+		echo "selftests: [SKIP] This test requires a configured kernel source tree"
 		exit 4
 	fi
 	if ! which strace > /dev/null 2>&1; then
@@ -77,6 +108,7 @@ check_env()
 }
 
 check_env
+check_conf
 
 #if we are running in a python environment, we need to capture that
 #python bin so we can use the same python environment in the vm
