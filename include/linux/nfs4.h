@@ -701,6 +701,12 @@ enum state_protect_how4 {
 	SP4_SSV		= 2
 };
 
+/* GET_DIR_DELEGATION non-fatal status codes */
+enum gddrnf4_status {
+	GDD4_OK		= 0,
+	GDD4_UNAVAIL	= 1
+};
+
 enum pnfs_layouttype {
 	LAYOUT_NFSV4_1_FILES  = 1,
 	LAYOUT_OSD2_OBJECTS = 2,
@@ -867,6 +873,28 @@ enum {
 	RCA4_TYPE_MASK_OBJ_LAYOUT_MAX	= 9,
 	RCA4_TYPE_MASK_OTHER_LAYOUT_MIN	= 12,
 	RCA4_TYPE_MASK_OTHER_LAYOUT_MAX	= 15,
+};
+
+enum nfs_cb_opnum4 {
+	OP_CB_GETATTR = 3,
+	OP_CB_RECALL  = 4,
+
+	/* Callback operations new to NFSv4.1 */
+	OP_CB_LAYOUTRECALL  = 5,
+	OP_CB_NOTIFY        = 6,
+	OP_CB_PUSH_DELEG    = 7,
+	OP_CB_RECALL_ANY    = 8,
+	OP_CB_RECALLABLE_OBJ_AVAIL = 9,
+	OP_CB_RECALL_SLOT   = 10,
+	OP_CB_SEQUENCE      = 11,
+	OP_CB_WANTS_CANCELLED = 12,
+	OP_CB_NOTIFY_LOCK   = 13,
+	OP_CB_NOTIFY_DEVICEID = 14,
+
+	/* Callback operations new to NFSv4.2 */
+	OP_CB_OFFLOAD = 15,
+
+	OP_CB_ILLEGAL = 10044,
 };
 
 #endif

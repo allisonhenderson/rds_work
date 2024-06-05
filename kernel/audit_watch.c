@@ -90,7 +90,7 @@ static inline struct audit_parent *audit_find_parent(struct inode *inode)
 	struct audit_parent *parent = NULL;
 	struct fsnotify_mark *entry;
 
-	entry = fsnotify_find_mark(&inode->i_fsnotify_marks, audit_watch_group);
+	entry = fsnotify_find_inode_mark(inode, audit_watch_group);
 	if (entry)
 		parent = container_of(entry, struct audit_parent, mark);
 
@@ -531,7 +531,7 @@ int audit_exe_compare(struct task_struct *tsk, struct audit_fsnotify_mark *mark)
 	if (tsk != current)
 		return 0;
 
-	if (WARN_ON_ONCE(!current->mm))
+	if (!current->mm)
 		return 0;
 	exe_file = get_mm_exe_file(current->mm);
 	if (!exe_file)

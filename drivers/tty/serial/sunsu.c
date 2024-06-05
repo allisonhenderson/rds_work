@@ -396,7 +396,8 @@ receive_chars(struct uart_sunsu_port *up, unsigned char *status)
 
 static void transmit_chars(struct uart_sunsu_port *up)
 {
-	struct circ_buf *xmit = &up->port.state->xmit;
+	struct tty_port *tport = &up->port.state->port;
+	unsigned char ch;
 	int count;
 
 	if (up->port.x_char) {
@@ -409,23 +410,23 @@ static void transmit_chars(struct uart_sunsu_port *up)
 		sunsu_stop_tx(&up->port);
 		return;
 	}
-	if (uart_circ_empty(xmit)) {
+	if (kfifo_is_empty(&tport->xmit_fifo)) {
 		__stop_tx(up);
 		return;
 	}
 
 	count = up->port.fifosize;
 	do {
-		serial_out(up, UART_TX, xmit->buf[xmit->tail]);
-		uart_xmit_advance(&up->port, 1);
-		if (uart_circ_empty(xmit))
+		if (!uart_fifo_get(&up->port, &ch))
 			break;
+
+		serial_out(up, UART_TX, ch);
 	} while (--count > 0);
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS)
 		uart_write_wakeup(&up->port);
 
-	if (uart_circ_empty(xmit))
+	if (kfifo_is_empty(&tport->xmit_fifo))
 		__stop_tx(up);
 }
 
@@ -1515,7 +1516,7 @@ out_unmap:
 	return err;
 }
 
-static int su_remove(struct platform_device *op)
+static void su_remove(struct platform_device *op)
 {
 	struct uart_sunsu_port *up = platform_get_drvdata(op);
 	bool kbdms = false;
@@ -1536,8 +1537,6 @@ static int su_remove(struct platform_device *op)
 
 	if (kbdms)
 		kfree(up);
-
-	return 0;
 }
 
 static const struct of_device_id su_match[] = {
@@ -1565,7 +1564,7 @@ static struct platform_driver su_driver = {
 		.of_match_table = su_match,
 	},
 	.probe		= su_probe,
-	.remove		= su_remove,
+	.remove_new	= su_remove,
 };
 
 static int __init sunsu_init(void)

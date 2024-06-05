@@ -4,7 +4,7 @@
 #include "sb-errors.h"
 #include "super-io.h"
 
-static const char * const bch2_sb_error_strs[] = {
+const char * const bch2_sb_error_strs[] = {
 #define x(t, n, ...) [n] = #t,
 	BCH_SB_ERRS()
 	NULL
@@ -20,9 +20,7 @@ static void bch2_sb_error_id_to_text(struct printbuf *out, enum bch_sb_error_id 
 
 static inline unsigned bch2_sb_field_errors_nr_entries(struct bch_sb_field_errors *e)
 {
-	return e
-		? (bch2_sb_field_bytes(&e->field) - sizeof(*e)) / sizeof(e->entries[0])
-		: 0;
+	return bch2_sb_field_nr_entries(e);
 }
 
 static inline unsigned bch2_sb_field_errors_u64s(unsigned nr)
@@ -32,7 +30,7 @@ static inline unsigned bch2_sb_field_errors_u64s(unsigned nr)
 }
 
 static int bch2_sb_errors_validate(struct bch_sb *sb, struct bch_sb_field *f,
-				   struct printbuf *err)
+				   enum bch_validate_flags flags, struct printbuf *err)
 {
 	struct bch_sb_field_errors *e = field_to_type(f, errors);
 	unsigned i, nr = bch2_sb_field_errors_nr_entries(e);

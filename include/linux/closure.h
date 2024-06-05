@@ -104,7 +104,7 @@
 
 struct closure;
 struct closure_syncer;
-typedef void (closure_fn) (struct closure *);
+typedef void (closure_fn) (struct work_struct *);
 extern struct dentry *bcache_debug;
 
 struct closure_waitlist {
@@ -194,6 +194,18 @@ static inline void closure_sync(struct closure *cl)
 		__closure_sync(cl);
 }
 
+int __closure_sync_timeout(struct closure *cl, unsigned long timeout);
+
+static inline int closure_sync_timeout(struct closure *cl, unsigned long timeout)
+{
+#ifdef CONFIG_DEBUG_CLOSURES
+	BUG_ON(closure_nr_remaining(cl) != 1 && !cl->closure_get_happened);
+#endif
+	return cl->closure_get_happened
+		? __closure_sync_timeout(cl, timeout)
+		: 0;
+}
+
 #ifdef CONFIG_DEBUG_CLOSURES
 
 void closure_debug_create(struct closure *cl);
@@ -254,7 +266,7 @@ static inline void closure_queue(struct closure *cl)
 		INIT_WORK(&cl->work, cl->work.func);
 		BUG_ON(!queue_work(wq, &cl->work));
 	} else
-		cl->fn(cl);
+		cl->fn(&cl->work);
 }
 
 /**
@@ -308,6 +320,11 @@ static inline void closure_wake_up(struct closure_waitlist *list)
 	smp_mb();
 	__closure_wake_up(list);
 }
+
+#define CLOSURE_CALLBACK(name)	void name(struct work_struct *ws)
+#define closure_type(name, type, member)				\
+	struct closure *cl = container_of(ws, struct closure, work);	\
+	type *name = container_of(cl, type, member)
 
 /**
  * continue_at - jump to another function with barrier

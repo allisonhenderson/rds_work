@@ -46,6 +46,10 @@
 #define MCA_REG__STATUS__ERRORCODEEXT(x)	MCA_REG_FIELD(x, 21, 16)
 #define MCA_REG__STATUS__ERRORCODE(x)		MCA_REG_FIELD(x, 15, 0)
 
+#define MCA_REG__MISC0__ERRCNT(x)		MCA_REG_FIELD(x, 43, 32)
+
+#define MCA_REG__SYND__ERRORINFORMATION(x)	MCA_REG_FIELD(x, 17, 0)
+
 enum amdgpu_mca_ip {
 	AMDGPU_MCA_IP_UNKNOW = -1,
 	AMDGPU_MCA_IP_PSP = 0,
@@ -61,6 +65,7 @@ enum amdgpu_mca_ip {
 enum amdgpu_mca_error_type {
 	AMDGPU_MCA_ERROR_TYPE_UE = 0,
 	AMDGPU_MCA_ERROR_TYPE_CE,
+	AMDGPU_MCA_ERROR_TYPE_DE,
 };
 
 struct amdgpu_mca_ras_block {
@@ -164,6 +169,7 @@ void amdgpu_mca_smu_debugfs_init(struct amdgpu_device *adev, struct dentry *root
 void amdgpu_mca_bank_set_init(struct mca_bank_set *mca_set);
 int amdgpu_mca_bank_set_add_entry(struct mca_bank_set *mca_set, struct mca_bank_entry *entry);
 void amdgpu_mca_bank_set_release(struct mca_bank_set *mca_set);
-int amdgpu_mca_smu_log_ras_error(struct amdgpu_device *adev, enum amdgpu_ras_block blk, enum amdgpu_mca_error_type type, struct ras_err_data *err_data);
+int amdgpu_mca_smu_log_ras_error(struct amdgpu_device *adev, enum amdgpu_ras_block blk, enum amdgpu_mca_error_type type,
+				 struct ras_err_data *err_data, struct ras_query_context *qctx);
 
 #endif

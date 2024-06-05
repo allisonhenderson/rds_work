@@ -1643,7 +1643,7 @@ static int top_print_work(struct perf_kwork *kwork __maybe_unused, struct kwork_
 	/*
 	 * pid
 	 */
-	ret += printf(" %*ld ", PRINT_PID_WIDTH, work->id);
+	ret += printf(" %*" PRIu64 " ", PRINT_PID_WIDTH, work->id);
 
 	/*
 	 * tgid
@@ -2230,7 +2230,7 @@ static int perf_kwork__top(struct perf_kwork *kwork)
 	perf_kwork__top_report(kwork);
 
 out:
-	free(kwork->top_stat.cpus_runtime);
+	zfree(&kwork->top_stat.cpus_runtime);
 	return ret;
 }
 

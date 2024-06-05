@@ -84,8 +84,6 @@ struct microcode_amd {
 	unsigned int			mpb[];
 };
 
-#define PATCH_MAX_SIZE (3 * PAGE_SIZE)
-
 static struct equiv_cpu_table {
 	unsigned int num_entries;
 	struct equiv_cpu_entry *entry;
@@ -103,8 +101,6 @@ struct cont_desc {
 	u8		     *data;
 	size_t		     size;
 };
-
-static u32 ucode_new_rev;
 
 /*
  * Microcode patch container file is prepended to the initrd in cpio
@@ -442,12 +438,11 @@ static int __apply_microcode_amd(struct microcode_amd *mc)
  *
  * Returns true if container found (sets @desc), false otherwise.
  */
-static bool early_apply_microcode(u32 cpuid_1_eax, void *ucode, size_t size)
+static bool early_apply_microcode(u32 cpuid_1_eax, u32 old_rev, void *ucode, size_t size)
 {
 	struct cont_desc desc = { 0 };
 	struct microcode_amd *mc;
 	bool ret = false;
-	u32 rev, dummy;
 
 	desc.cpuid_1_eax = cpuid_1_eax;
 
@@ -457,25 +452,18 @@ static bool early_apply_microcode(u32 cpuid_1_eax, void *ucode, size_t size)
 	if (!mc)
 		return ret;
 
-	native_rdmsr(MSR_AMD64_PATCH_LEVEL, rev, dummy);
-
 	/*
 	 * Allow application of the same revision to pick up SMT-specific
 	 * changes even if the revision of the other SMT thread is already
 	 * up-to-date.
 	 */
-	if (rev > mc->hdr.patch_id)
+	if (old_rev > mc->hdr.patch_id)
 		return ret;
 
-	if (!__apply_microcode_amd(mc)) {
-		ucode_new_rev = mc->hdr.patch_id;
-		ret = true;
-	}
-
-	return ret;
+	return !__apply_microcode_amd(mc);
 }
 
-static bool get_builtin_microcode(struct cpio_data *cp, unsigned int family)
+static bool get_builtin_microcode(struct cpio_data *cp, u8 family)
 {
 	char fw_name[36] = "amd-ucode/microcode_amd.bin";
 	struct firmware fw;
@@ -506,9 +494,12 @@ static void __init find_blobs_in_containers(unsigned int cpuid_1_eax, struct cpi
 	*ret = cp;
 }
 
-void __init load_ucode_amd_bsp(unsigned int cpuid_1_eax)
+void __init load_ucode_amd_bsp(struct early_load_data *ed, unsigned int cpuid_1_eax)
 {
 	struct cpio_data cp = { };
+	u32 dummy;
+
+	native_rdmsr(MSR_AMD64_PATCH_LEVEL, ed->old_rev, dummy);
 
 	/* Needed in load_microcode_amd() */
 	ucode_cpu_info[0].cpu_sig.sig = cpuid_1_eax;
@@ -517,7 +508,8 @@ void __init load_ucode_amd_bsp(unsigned int cpuid_1_eax)
 	if (!(cp.data && cp.size))
 		return;
 
-	early_apply_microcode(cpuid_1_eax, cp.data, cp.size);
+	if (early_apply_microcode(cpuid_1_eax, ed->old_rev, cp.data, cp.size))
+		native_rdmsr(MSR_AMD64_PATCH_LEVEL, ed->new_rev, dummy);
 }
 
 static enum ucode_state load_microcode_amd(u8 family, const u8 *data, size_t size);
@@ -625,10 +617,8 @@ void reload_ucode_amd(unsigned int cpu)
 	rdmsr(MSR_AMD64_PATCH_LEVEL, rev, dummy);
 
 	if (rev < mc->hdr.patch_id) {
-		if (!__apply_microcode_amd(mc)) {
-			ucode_new_rev = mc->hdr.patch_id;
-			pr_info("reload patch_level=0x%08x\n", ucode_new_rev);
-		}
+		if (!__apply_microcode_amd(mc))
+			pr_info_once("reload revision: 0x%08x\n", mc->hdr.patch_id);
 	}
 }
 
@@ -648,8 +638,6 @@ static int collect_cpu_info_amd(int cpu, struct cpu_signature *csig)
 	p = find_patch(cpu);
 	if (p && (p->patch_id == csig->rev))
 		uci->mc = p->data;
-
-	pr_info("CPU%d: patch_level=0x%08x\n", cpu, csig->rev);
 
 	return 0;
 }
@@ -690,8 +678,6 @@ static enum ucode_state apply_microcode_amd(int cpu)
 
 	rev = mc_amd->hdr.patch_id;
 	ret = UCODE_UPDATED;
-
-	pr_info("CPU%d: new patch_level=0x%08x\n", cpu, rev);
 
 out:
 	uci->cpu_sig.rev = rev;
@@ -935,11 +921,6 @@ struct microcode_ops * __init init_amd_microcode(void)
 		pr_warn("AMD CPU family 0x%x not supported\n", c->x86);
 		return NULL;
 	}
-
-	if (ucode_new_rev)
-		pr_info_once("microcode updated early to new patch_level=0x%08x\n",
-			     ucode_new_rev);
-
 	return &microcode_amd_ops;
 }
 

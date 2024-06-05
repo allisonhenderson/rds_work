@@ -63,7 +63,7 @@ int passed;
 int failed;
 int map_fd[9];
 struct bpf_map *maps[9];
-int prog_fd[11];
+int prog_fd[9];
 
 int txmsg_pass;
 int txmsg_redir;
@@ -1793,8 +1793,6 @@ int prog_attach_type[] = {
 	BPF_SK_MSG_VERDICT,
 	BPF_SK_MSG_VERDICT,
 	BPF_SK_MSG_VERDICT,
-	BPF_SK_MSG_VERDICT,
-	BPF_SK_MSG_VERDICT,
 };
 
 int prog_type[] = {
@@ -1802,8 +1800,6 @@ int prog_type[] = {
 	BPF_PROG_TYPE_SK_SKB,
 	BPF_PROG_TYPE_SK_SKB,
 	BPF_PROG_TYPE_SOCK_OPS,
-	BPF_PROG_TYPE_SK_MSG,
-	BPF_PROG_TYPE_SK_MSG,
 	BPF_PROG_TYPE_SK_MSG,
 	BPF_PROG_TYPE_SK_MSG,
 	BPF_PROG_TYPE_SK_MSG,
@@ -1887,10 +1883,13 @@ static int check_whitelist(struct _test *t, struct sockmap_options *opt)
 	while (entry) {
 		if ((opt->prepend && strstr(opt->prepend, entry) != 0) ||
 		    strstr(opt->map, entry) != 0 ||
-		    strstr(t->title, entry) != 0)
+		    strstr(t->title, entry) != 0) {
+			free(ptr);
 			return 0;
+		}
 		entry = strtok(NULL, ",");
 	}
+	free(ptr);
 	return -EINVAL;
 }
 
@@ -1907,10 +1906,13 @@ static int check_blacklist(struct _test *t, struct sockmap_options *opt)
 	while (entry) {
 		if ((opt->prepend && strstr(opt->prepend, entry) != 0) ||
 		    strstr(opt->map, entry) != 0 ||
-		    strstr(t->title, entry) != 0)
+		    strstr(t->title, entry) != 0) {
+			free(ptr);
 			return 0;
+		}
 		entry = strtok(NULL, ",");
 	}
+	free(ptr);
 	return -EINVAL;
 }
 
@@ -2104,9 +2106,9 @@ out:
 		free(options.whitelist);
 	if (options.blacklist)
 		free(options.blacklist);
+	close(cg_fd);
 	if (cg_created)
 		cleanup_cgroup_environment();
-	close(cg_fd);
 	return err;
 }
 
