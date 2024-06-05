@@ -25,6 +25,10 @@ ksrc_dir="$(realpath $build_dir/../../../../../)"
 kconfig="$ksrc_dir/.config"
 obj_dir="$ksrc_dir/net/rds"
 
+# the gcov version much match the gcc major version
+GCC_VER=`gcc --version | grep gcc | awk '{print $3}'| awk 'BEGIN {FS="."}{print $1}'`
+GCOV_CMD=gcov-$GCC_VER
+
 # This script currently only works for x86_64
 ARCH="$(uname -m)"
 case "${ARCH}" in
@@ -82,7 +86,10 @@ check_env()
 		echo "selftests: [SKIP] Could not run test without tcpdump"
 		exit 4
 	fi
-
+	if ! which $GCOV_CMD > /dev/null 2>&1; then
+		echo "selftests: [SKIP] Could not run with out gcov. gcov version must match gcc version"
+		exit 4
+	fi
 	if ! which gcovr > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without gcovr"
 		exit 4
@@ -135,4 +142,4 @@ $QEMU_BINARY \
 
 # generate a nice HTML coverage report
 echo running gcovr...
-gcovr -v -s --html-details -o $LOG_DIR/coverage/  ${ksrc_dir}/net/rds/
+gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors -o $LOG_DIR/coverage/  "${ksrc_dir}/net/rds/"
