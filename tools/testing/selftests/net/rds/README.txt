@@ -12,4 +12,4 @@ Usage:
     # launch the tests in a VM
     tools/testing/selftests/net/rds/run.sh
 
-An HTML coverage report will be output in coverage/.
+An HTML coverage report will be output in /tmp/rds_logs/coverage/.

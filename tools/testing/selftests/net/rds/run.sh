@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 #! /bin/bash
 
 set -e
@@ -87,7 +88,8 @@ check_env()
 		exit 4
 	fi
 	if ! which $GCOV_CMD > /dev/null 2>&1; then
-		echo "selftests: [SKIP] Could not run with out gcov. gcov version must match gcc version"
+		echo "selftests: [SKIP] Could not run with out gcov. "
+		echo "gcov version must match gcc version"
 		exit 4
 	fi
 	if ! which gcovr > /dev/null 2>&1; then
@@ -133,7 +135,8 @@ $QEMU_BINARY \
 	-cpu host \
 	-smp 4 \
 	-kernel ${ksrc_dir}/arch/x86/boot/bzImage \
-	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD}" \
+	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw \
+		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD}" \
 	-display none \
 	-serial stdio \
 	-fsdev local,id=fsdev0,path=/,security_model=none,multidevs=remap \
@@ -142,4 +145,5 @@ $QEMU_BINARY \
 
 # generate a nice HTML coverage report
 echo running gcovr...
-gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors -o $LOG_DIR/coverage/  "${ksrc_dir}/net/rds/"
+gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors \
+	-o $LOG_DIR/coverage/ "${ksrc_dir}/net/rds/"

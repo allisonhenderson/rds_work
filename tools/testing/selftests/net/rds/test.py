@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0
 #! /usr/bin/env python3
 
 import argparse
@@ -229,7 +230,7 @@ for (sender, receiver), send_hash in send_hashes.items():
     recv_hash = recv_hashes.get((sender, receiver))
 
     if recv_hash is None:
-        print("FAIL: No data recieved")
+        print("FAIL: No data received")
         sys.exit(1)
 
     if send_hash.hexdigest() != recv_hash.hexdigest():
