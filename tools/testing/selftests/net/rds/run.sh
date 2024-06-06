@@ -26,9 +26,7 @@ ksrc_dir="$(realpath $build_dir/../../../../../)"
 kconfig="$ksrc_dir/.config"
 obj_dir="$ksrc_dir/net/rds"
 
-# the gcov version much match the gcc major version
-GCC_VER=`gcc --version | grep gcc | awk '{print $3}'| awk 'BEGIN {FS="."}{print $1}'`
-GCOV_CMD=gcov-$GCC_VER
+GCOV_CMD=gcov
 
 # This script currently only works for x86_64
 ARCH="$(uname -m)"
@@ -89,9 +87,30 @@ check_env()
 	fi
 	if ! which $GCOV_CMD > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run with out gcov. "
-		echo "gcov version must match gcc version"
 		exit 4
 	fi
+
+	# the gcov version much match the gcc version
+	GCC_VER=`gcc -dumpfullversion`
+	GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| awk 'BEGIN {FS="-"}{print $1}'`
+	if [ "$GCOV_VER" != "$GCC_VER" ]; then
+		#attempt to find a matching gcov version
+		GCOV_CMD=gcov-`gcc -dumpversion`
+
+		if ! which $GCOV_CMD > /dev/null 2>&1; then
+			echo "selftests: [SKIP] gcov version must match gcc version"
+			exit 4
+		fi
+
+		#recheck version number of found gcov executable
+		GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| \
+			  awk 'BEGIN {FS="-"}{print $1}'`
+		if [ "$GCOV_VER" != "$GCC_VER" ]; then
+			echo "selftests: [SKIP] gcov version must match gcc version"
+			exit 4
+		fi
+	fi
+
 	if ! which gcovr > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without gcovr"
 		exit 4
