@@ -40,6 +40,69 @@ x86_64)
 	;;
 esac
 
+GENERATE_GCOV_REPORT=1
+
+#check to see if the host has the required packages to generate a gcov report
+check_gcov_env()
+{
+	if ! which $GCOV_CMD > /dev/null 2>&1; then
+		echo "Warning: Could not find gcov. "
+		GENERATE_GCOV_REPORT=0
+	fi
+
+	# the gcov version much match the gcc version
+	GCC_VER=`gcc -dumpfullversion`
+	GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| awk 'BEGIN {FS="-"}{print $1}'`
+	if [ "$GCOV_VER" != "$GCC_VER" ]; then
+		#attempt to find a matching gcov version
+		GCOV_CMD=gcov-`gcc -dumpversion`
+
+		if ! which $GCOV_CMD > /dev/null 2>&1; then
+			echo "Warning: Could not find an appropriate gcov installation. \
+				gcov version must match gcc version"
+			GENERATE_GCOV_REPORT=0
+		fi
+
+		#recheck version number of found gcov executable
+		GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| \
+			  awk 'BEGIN {FS="-"}{print $1}'`
+		if [ "$GCOV_VER" != "$GCC_VER" ]; then
+			echo "Warning: Could not find an appropriate gcov installation. \
+				gcov version must match gcc version"
+			GENERATE_GCOV_REPORT=0
+		else
+			echo "Warning: Mismatched gcc and gcov detected.  Using $GCOV_CMD"
+		fi
+	fi
+
+	if ! which gcovr > /dev/null 2>&1; then
+		echo "Warning: Could not find gcovr"
+		GENERATE_GCOV_REPORT=0
+	fi
+}
+
+check_gcov_conf()
+{
+	if ! grep -x "CONFIG_GCOV_PROFILE_RDS=y" $kconfig > /dev/null 2>&1; then
+		echo "Warning: $1 should be enabled"
+		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
+			to correct this"
+		GENERATE_GCOV_REPORT=0
+	fi
+	if ! grep -x "CONFIG_GCOV_KERNEL=y" $kconfig > /dev/null 2>&1; then
+		echo "Warning: $1 should be enabled"
+		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
+			to correct this"
+		GENERATE_GCOV_REPORT=0
+	fi
+	if grep -x "CONFIG_GCOV_PROFILE_ALL=y" $kconfig > /dev/null 2>&1; then
+		echo "Warning: $1 should not be enabled"
+		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
+			to correct this"
+		GENERATE_GCOV_REPORT=0
+	fi
+}
+
 # Kselftest framework requirement - SKIP code is 4.
 check_conf_enabled() {
 	if ! grep -x "$1=y" $kconfig > /dev/null 2>&1; then
@@ -59,12 +122,9 @@ check_conf() {
 	check_conf_enabled CONFIG_NET_SCH_NETEM
 	check_conf_enabled CONFIG_VETH
 	check_conf_enabled CONFIG_NET_NS
-	check_conf_enabled CONFIG_GCOV_PROFILE_RDS
-	check_conf_enabled CONFIG_GCOV_KERNEL
 	check_conf_enabled CONFIG_RDS_TCP
 	check_conf_enabled CONFIG_RDS
 	check_conf_disabled CONFIG_MODULES
-	check_conf_disabled CONFIG_GCOV_PROFILE_ALL
 }
 
 check_env()
@@ -85,37 +145,6 @@ check_env()
 		echo "selftests: [SKIP] Could not run test without tcpdump"
 		exit 4
 	fi
-	if ! which $GCOV_CMD > /dev/null 2>&1; then
-		echo "selftests: [SKIP] Could not run with out gcov. "
-		exit 4
-	fi
-
-	# the gcov version much match the gcc version
-	GCC_VER=`gcc -dumpfullversion`
-	GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| awk 'BEGIN {FS="-"}{print $1}'`
-	if [ "$GCOV_VER" != "$GCC_VER" ]; then
-		#attempt to find a matching gcov version
-		GCOV_CMD=gcov-`gcc -dumpversion`
-
-		if ! which $GCOV_CMD > /dev/null 2>&1; then
-			echo "selftests: [SKIP] gcov version must match gcc version"
-			exit 4
-		fi
-
-		#recheck version number of found gcov executable
-		GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| \
-			  awk 'BEGIN {FS="-"}{print $1}'`
-		if [ "$GCOV_VER" != "$GCC_VER" ]; then
-			echo "selftests: [SKIP] gcov version must match gcc version"
-			exit 4
-		fi
-	fi
-
-	if ! which gcovr > /dev/null 2>&1; then
-		echo "selftests: [SKIP] Could not run test without gcovr"
-		exit 4
-	fi
-
 	if ! which $QEMU_BINARY > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without qemu"
 		exit 4
@@ -138,6 +167,14 @@ check_env()
 check_env
 check_conf
 
+check_gcov_env
+check_gcov_conf
+
+gflags=""
+if [ $GENERATE_GCOV_REPORT -eq 1 ]; then
+	gflags="-g"
+fi
+
 #if we are running in a python environment, we need to capture that
 #python bin so we can use the same python environment in the vm
 PY_CMD=`which python3`
@@ -155,7 +192,7 @@ $QEMU_BINARY \
 	-smp 4 \
 	-kernel ${ksrc_dir}/arch/x86/boot/bzImage \
 	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw \
-		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD}" \
+		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD} ${gflags}" \
 	-display none \
 	-serial stdio \
 	-fsdev local,id=fsdev0,path=/,security_model=none,multidevs=remap \
@@ -163,6 +200,8 @@ $QEMU_BINARY \
 	-no-reboot
 
 # generate a nice HTML coverage report
-echo running gcovr...
-gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors \
-	-o $LOG_DIR/coverage/ "${ksrc_dir}/net/rds/"
+if [ $GENERATE_GCOV_REPORT -eq 1 ]; then
+	echo running gcovr...
+	gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors \
+		-o $LOG_DIR/coverage/ "${ksrc_dir}/net/rds/"
+fi
