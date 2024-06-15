@@ -180,6 +180,7 @@ fi
 PY_CMD=`which python3`
 
 LOG_DIR=/tmp/rds_logs
+TRACE_FILE=${LOG_DIR}/rds-strace.txt
 mkdir -p  $LOG_DIR
 
 # start a VM using a 9P root filesystem that maps to the host's /
@@ -204,4 +205,16 @@ if [ $GENERATE_GCOV_REPORT -eq 1 ]; then
 	echo running gcovr...
 	gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors \
 		-o $LOG_DIR/coverage/ "${ksrc_dir}/net/rds/"
+fi
+
+if [ ! -f ${TRACE_FILE} ]; then
+	echo "FAIL: Test failed to complete"
+	exit 1
+fi
+
+set +e
+tail -1 ${TRACE_FILE} | grep "killed by SIGALRM" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+	echo "FAIL: Test timed out"
+	exit 1
 fi
