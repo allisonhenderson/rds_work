@@ -207,6 +207,7 @@ if [ $GENERATE_GCOV_REPORT -eq 1 ]; then
 		-o $LOG_DIR/coverage/ "${ksrc_dir}/net/rds/"
 fi
 
+# extract the return code of the test script from the strace if it is there
 if [ ! -f ${TRACE_FILE} ]; then
 	echo "FAIL: Test failed to complete"
 	exit 1
@@ -218,3 +219,18 @@ if [ $? -eq 0 ]; then
 	echo "FAIL: Test timed out"
 	exit 1
 fi
+
+tail -1 ${TRACE_FILE} | grep "exited with"
+if [ $? -ne 0 ]; then
+	echo "FAIL: Test failed to complete"
+	exit 1
+fi
+
+test_rc=`tail -1 ${TRACE_FILE} | grep -o 'exited with.*' | cut -d ' ' -f 3`
+if [ $test_rc -eq 0 ]; then
+	echo "PASS: Test completed successfully"
+else
+	echo "FAIL: Test failed"
+fi
+
+exit $test_rc

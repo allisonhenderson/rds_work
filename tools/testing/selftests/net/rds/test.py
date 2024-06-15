@@ -242,3 +242,4 @@ for (sender, receiver), send_hash in send_hashes.items():
     print(f"{sender}/{receiver}: ok")
 
 print("Success")
+sys.exit(0)
