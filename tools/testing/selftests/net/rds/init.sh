@@ -29,7 +29,7 @@ while getopts "d:p:g" opt; do
   esac
 done
 
-LOG_FILE=$LOG_DIR/rds-strace.txt
+LOG_FILE="${LOG_DIR}/rds-strace.txt"
 
 mount -t proc none /proc
 mount -t sysfs none /sys
@@ -37,19 +37,19 @@ mount -t tmpfs none /var/run
 mount -t debugfs none /sys/kernel/debug
 
 echo running RDS tests...
-echo Traces will be logged to $LOG_FILE
-rm -f $LOG_FILE
-strace -T -tt -o "$LOG_FILE" $PY_CMD $(dirname "$0")/test.py --timeout 120 -d "$LOG_DIR"  || true
+echo Traces will be logged to "$LOG_FILE"
+rm -f "$LOG_FILE"
+strace -T -tt -o "$LOG_FILE" "$PY_CMD" "$(dirname "$0")/test.py" --timeout 120 -d "$LOG_DIR" || true
 
-if [ $COLLECT_GCOV -eq 1 ]; then
+if [ "$COLLECT_GCOV" -eq 1 ]; then
 	echo saving coverage data...
-	(set +x; cd /sys/kernel/debug/gcov; find * -name '*.gcda' | \
-	while read f
+	(set +x; cd /sys/kernel/debug/gcov; find ./* -name '*.gcda' | \
+	while read -r f
 	do
-		cat < /sys/kernel/debug/gcov/$f > /$f
+		cat < "/sys/kernel/debug/gcov/$f" > "/$f"
 	done)
 fi
 
-dmesg > $LOG_DIR/dmesg.out
+dmesg > "${LOG_DIR}/dmesg.out"
 
 /usr/sbin/poweroff --no-wtmp --force

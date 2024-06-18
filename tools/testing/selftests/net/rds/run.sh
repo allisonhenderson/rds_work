@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: GPL-2.0
 #! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
 
 set -e
 set -u
@@ -7,7 +7,7 @@ set -u
 unset KBUILD_OUTPUT
 
 current_dir="$(realpath "$(dirname "$0")")"
-build_dir=$current_dir
+build_dir="$current_dir"
 
 build_include="$current_dir/include.sh"
 if test -f "$build_include"; then
@@ -15,14 +15,14 @@ if test -f "$build_include"; then
 	# built.  We will need this if the tests are installed in a location
 	# other than the kernel source
 
-	source $build_include
-	build_dir=$mk_build_dir
+	source "$build_include"
+	build_dir="$mk_build_dir"
 fi
 
 # This test requires kernel source and the *.gcda data therein
 # Locate the top level of the kernel source, and the net/rds
 # subfolder with the appropriate *.gcno object files
-ksrc_dir="$(realpath $build_dir/../../../../../)"
+ksrc_dir="$(realpath "$build_dir"/../../../../../)"
 kconfig="$ksrc_dir/.config"
 obj_dir="$ksrc_dir/net/rds"
 
@@ -45,27 +45,27 @@ GENERATE_GCOV_REPORT=1
 #check to see if the host has the required packages to generate a gcov report
 check_gcov_env()
 {
-	if ! which $GCOV_CMD > /dev/null 2>&1; then
+	if ! which "$GCOV_CMD" > /dev/null 2>&1; then
 		echo "Warning: Could not find gcov. "
 		GENERATE_GCOV_REPORT=0
 	fi
 
 	# the gcov version much match the gcc version
-	GCC_VER=`gcc -dumpfullversion`
-	GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| awk 'BEGIN {FS="-"}{print $1}'`
+	GCC_VER=$(gcc -dumpfullversion)
+	GCOV_VER=$($GCOV_CMD -v | grep gcov | awk '{print $3}'| awk 'BEGIN {FS="-"}{print $1}')
 	if [ "$GCOV_VER" != "$GCC_VER" ]; then
 		#attempt to find a matching gcov version
-		GCOV_CMD=gcov-`gcc -dumpversion`
+		GCOV_CMD=gcov-$(gcc -dumpversion)
 
-		if ! which $GCOV_CMD > /dev/null 2>&1; then
+		if ! which "$GCOV_CMD" > /dev/null 2>&1; then
 			echo "Warning: Could not find an appropriate gcov installation. \
 				gcov version must match gcc version"
 			GENERATE_GCOV_REPORT=0
 		fi
 
 		#recheck version number of found gcov executable
-		GCOV_VER=`$GCOV_CMD -v | grep gcov | awk '{print $3}'| \
-			  awk 'BEGIN {FS="-"}{print $1}'`
+		GCOV_VER=$($GCOV_CMD -v | grep gcov | awk '{print $3}'| \
+			awk 'BEGIN {FS="-"}{print $1}')
 		if [ "$GCOV_VER" != "$GCC_VER" ]; then
 			echo "Warning: Could not find an appropriate gcov installation. \
 				gcov version must match gcc version"
@@ -83,19 +83,19 @@ check_gcov_env()
 
 check_gcov_conf()
 {
-	if ! grep -x "CONFIG_GCOV_PROFILE_RDS=y" $kconfig > /dev/null 2>&1; then
+	if ! grep -x "CONFIG_GCOV_PROFILE_RDS=y" "$kconfig" > /dev/null 2>&1; then
 		echo "Warning: CONFIG_GCOV_PROFILE_RDS should be enabled"
 		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
 			to correct this"
 		GENERATE_GCOV_REPORT=0
 	fi
-	if ! grep -x "CONFIG_GCOV_KERNEL=y" $kconfig > /dev/null 2>&1; then
+	if ! grep -x "CONFIG_GCOV_KERNEL=y" "$kconfig" > /dev/null 2>&1; then
 		echo "Warning: CONFIG_GCOV_KERNEL should be enabled"
 		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
 			to correct this"
 		GENERATE_GCOV_REPORT=0
 	fi
-	if grep -x "CONFIG_GCOV_PROFILE_ALL=y" $kconfig > /dev/null 2>&1; then
+	if grep -x "CONFIG_GCOV_PROFILE_ALL=y" "$kconfig" > /dev/null 2>&1; then
 		echo "Warning: CONFIG_GCOV_PROFILE_AL should not be enabled"
 		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
 			to correct this"
@@ -105,16 +105,16 @@ check_gcov_conf()
 
 # Kselftest framework requirement - SKIP code is 4.
 check_conf_enabled() {
-	if ! grep -x "$1=y" $kconfig > /dev/null 2>&1; then
-		echo selftests: [SKIP] This test requires $1 enabled
-		echo Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel
+	if ! grep -x "$1=y" "$kconfig" > /dev/null 2>&1; then
+		echo "selftests: [SKIP] This test requires $1 enabled"
+		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel"
 		exit 4
 	fi
 }
 check_conf_disabled() {
-	if grep -x "$1=y" $kconfig > /dev/null 2>&1; then
-		echo selftests: [SKIP] This test requires $1 disabled
-		echo Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel
+	if grep -x "$1=y" "$kconfig" > /dev/null 2>&1; then
+		echo "selftests: [SKIP] This test requires $1 disabled"
+		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel"
 		exit 4
 	fi
 }
@@ -129,11 +129,11 @@ check_conf() {
 
 check_env()
 {
-	if ! test -d $obj_dir; then
+	if ! test -d "$obj_dir"; then
 		echo "selftests: [SKIP] This test requires a kernel source tree"
 		exit 4
 	fi
-	if ! test -e $kconfig; then
+	if ! test -e "$kconfig"; then
 		echo "selftests: [SKIP] This test requires a configured kernel source tree"
 		exit 4
 	fi
@@ -145,7 +145,7 @@ check_env()
 		echo "selftests: [SKIP] Could not run test without tcpdump"
 		exit 4
 	fi
-	if ! which $QEMU_BINARY > /dev/null 2>&1; then
+	if ! which "$QEMU_BINARY" > /dev/null 2>&1; then
 		echo "selftests: [SKIP] Could not run test without qemu"
 		exit 4
 	fi
@@ -155,8 +155,8 @@ check_env()
 		exit 4
 	fi
 
-	python_major=`python3 -c "import sys; print(sys.version_info[0])"`
-	python_minor=`python3 -c "import sys; print(sys.version_info[1])"`
+	python_major=$(python3 -c "import sys; print(sys.version_info[0])")
+	python_minor=$(python3 -c "import sys; print(sys.version_info[1])")
 	if [[ python_major -lt 3 || ( python_major -eq 3 && python_minor -lt 9 ) ]] ; then
 		echo "selftests: [SKIP] Could not run test without at least python3.9"
 		python3 -V
@@ -171,17 +171,17 @@ check_gcov_env
 check_gcov_conf
 
 gflags=""
-if [ $GENERATE_GCOV_REPORT -eq 1 ]; then
+if [ "$GENERATE_GCOV_REPORT" -eq 1 ]; then
 	gflags="-g"
 fi
 
 #if we are running in a python environment, we need to capture that
 #python bin so we can use the same python environment in the vm
-PY_CMD=`which python3`
+PY_CMD=$(which python3)
 
 LOG_DIR=/tmp/rds_logs
-TRACE_FILE=${LOG_DIR}/rds-strace.txt
-mkdir -p  $LOG_DIR
+TRACE_FILE="${LOG_DIR}/rds-strace.txt"
+mkdir -p  "$LOG_DIR"
 
 # start a VM using a 9P root filesystem that maps to the host's /
 # we pass ./init.sh from the same directory as we are in as the
@@ -191,7 +191,7 @@ $QEMU_BINARY \
 	-enable-kvm \
 	-cpu host \
 	-smp 4 \
-	-kernel ${ksrc_dir}/arch/x86/boot/bzImage \
+	-kernel "${ksrc_dir}/arch/x86/boot/bzImage" \
 	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw \
 		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD} ${gflags}" \
 	-display none \
@@ -201,36 +201,36 @@ $QEMU_BINARY \
 	-no-reboot
 
 # generate a nice HTML coverage report
-if [ $GENERATE_GCOV_REPORT -eq 1 ]; then
+if [ "$GENERATE_GCOV_REPORT" -eq 1 ]; then
 	echo running gcovr...
-	gcovr -v -s --html-details --gcov-executable $GCOV_CMD --gcov-ignore-parse-errors \
-		-o $LOG_DIR/coverage/ "${ksrc_dir}/net/rds/"
+	gcovr -v -s --html-details --gcov-executable "$GCOV_CMD" --gcov-ignore-parse-errors \
+		-o "${LOG_DIR}/coverage/" "${ksrc_dir}/net/rds/"
 fi
 
 # extract the return code of the test script from the strace if it is there
-if [ ! -f ${TRACE_FILE} ]; then
+if [ ! -f "$TRACE_FILE" ]; then
 	echo "FAIL: Test failed to complete"
 	exit 1
 fi
 
 set +e
-tail -1 ${TRACE_FILE} | grep "killed by SIGALRM" > /dev/null 2>&1
+tail -1 "$TRACE_FILE" | grep "killed by SIGALRM" > /dev/null 2>&1
 if [ $? -eq 0 ]; then
 	echo "FAIL: Test timed out"
 	exit 1
 fi
 
-tail -1 ${TRACE_FILE} | grep "exited with"
+tail -1 "$TRACE_FILE" | grep "exited with"
 if [ $? -ne 0 ]; then
 	echo "FAIL: Test failed to complete"
 	exit 1
 fi
 
-test_rc=`tail -1 ${TRACE_FILE} | grep -o 'exited with.*' | cut -d ' ' -f 3`
-if [ $test_rc -eq 0 ]; then
+test_rc=$(tail -1 "$TRACE_FILE" | grep -o 'exited with.*' | cut -d ' ' -f 3)
+if [ "$test_rc" -eq 0 ]; then
 	echo "PASS: Test completed successfully"
 else
 	echo "FAIL: Test failed"
 fi
 
-exit $test_rc
+exit "$test_rc"
