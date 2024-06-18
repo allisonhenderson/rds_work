@@ -180,6 +180,8 @@ fi
 PY_CMD=$(which python3)
 
 LOG_DIR=/tmp/rds_logs
+rm -r "$LOG_DIR"
+
 TRACE_FILE="${LOG_DIR}/rds-strace.txt"
 mkdir -p  "$LOG_DIR"
 
@@ -193,7 +195,8 @@ $QEMU_BINARY \
 	-smp 4 \
 	-kernel "${ksrc_dir}/arch/x86/boot/bzImage" \
 	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw \
-		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD} ${gflags}" \
+		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD} ${gflags} \
+		panic=-1" \
 	-display none \
 	-serial stdio \
 	-fsdev local,id=fsdev0,path=/,security_model=none,multidevs=remap \
