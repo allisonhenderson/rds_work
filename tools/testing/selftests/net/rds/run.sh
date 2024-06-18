@@ -84,19 +84,19 @@ check_gcov_env()
 check_gcov_conf()
 {
 	if ! grep -x "CONFIG_GCOV_PROFILE_RDS=y" $kconfig > /dev/null 2>&1; then
-		echo "Warning: $1 should be enabled"
+		echo "Warning: CONFIG_GCOV_PROFILE_RDS should be enabled"
 		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
 			to correct this"
 		GENERATE_GCOV_REPORT=0
 	fi
 	if ! grep -x "CONFIG_GCOV_KERNEL=y" $kconfig > /dev/null 2>&1; then
-		echo "Warning: $1 should be enabled"
+		echo "Warning: CONFIG_GCOV_KERNEL should be enabled"
 		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
 			to correct this"
 		GENERATE_GCOV_REPORT=0
 	fi
 	if grep -x "CONFIG_GCOV_PROFILE_ALL=y" $kconfig > /dev/null 2>&1; then
-		echo "Warning: $1 should not be enabled"
+		echo "Warning: CONFIG_GCOV_PROFILE_AL should not be enabled"
 		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
 			to correct this"
 		GENERATE_GCOV_REPORT=0
