@@ -39,7 +39,7 @@ mount -t debugfs none /sys/kernel/debug
 echo running RDS tests...
 echo Traces will be logged to "$LOG_FILE"
 rm -f "$LOG_FILE"
-strace -T -tt -o "$LOG_FILE" "$PY_CMD" "$(dirname "$0")/test.py" --timeout 120 -d "$LOG_DIR" || true
+strace -T -tt -o "$LOG_FILE" "$PY_CMD" "$(dirname "$0")/test.py" --timeout 300 -d "$LOG_DIR" || true
 
 if [ "$COLLECT_GCOV" -eq 1 ]; then
 	echo saving coverage data...
