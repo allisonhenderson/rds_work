@@ -7,6 +7,23 @@ set -x
 
 unset KBUILD_OUTPUT
 
+GENERATE_GCOV_REPORT=0
+while getopts "g" opt; do
+  case ${opt} in
+    g)
+      GENERATE_GCOV_REPORT=1
+      ;;
+    :)
+      echo "USAGE: config.sh [-g]"
+      exit 1
+      ;;
+    ?)
+      echo "Invalid option: -${OPTARG}."
+      exit 1
+      ;;
+  esac
+done
+
 # start with a default config
 make defconfig
 
@@ -17,10 +34,16 @@ scripts/config --disable CONFIG_MODULES
 scripts/config --enable CONFIG_RDS
 scripts/config --enable CONFIG_RDS_TCP
 
-# instrument RDS and only RDS
-scripts/config --enable CONFIG_GCOV_KERNEL
-scripts/config --disable GCOV_PROFILE_ALL
-scripts/config --enable GCOV_PROFILE_RDS
+if [ "$GENERATE_GCOV_REPORT" -eq 1 ]; then
+	# instrument RDS and only RDS
+	scripts/config --enable CONFIG_GCOV_KERNEL
+	scripts/config --disable GCOV_PROFILE_ALL
+	scripts/config --enable GCOV_PROFILE_RDS
+else
+	scripts/config --disable CONFIG_GCOV_KERNEL
+	scripts/config --disable GCOV_PROFILE_ALL
+	scripts/config --disable GCOV_PROFILE_RDS
+fi
 
 # need network namespaces to run tests with veth network interfaces
 scripts/config --enable CONFIG_NET_NS

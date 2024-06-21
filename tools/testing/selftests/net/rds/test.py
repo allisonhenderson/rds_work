@@ -65,9 +65,15 @@ def netns_socket(netns, *args):
 parser = argparse.ArgumentParser(description="init script args",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-d", "--logdir", action="store", help="directory to store logs", default="/tmp")
-parser.add_argument('--timeout', type=int, default=0)
+parser.add_argument('--timeout', help="timeout to terminate hung test", type=int, default=0)
+parser.add_argument('-l', '--loss', help="Simulate tcp packet loss", type=int, default=0)
+parser.add_argument('-c', '--corruption', help="Simulate tcp packet corruption", type=int, default=0)
+parser.add_argument('-u', '--duplicate', help="Simulate tcp packet duplication", type=int, default=0)
 args = parser.parse_args()
 logdir=args.logdir
+packet_loss=args.loss
+packet_corruption=args.corruption
+packet_duplicate=args.duplicate
 
 ip('netns', 'add', net0)
 ip('netns', 'add', net1)
@@ -112,9 +118,9 @@ for net in [net0, net1]:
 for net, iface in [(net0, veth0), (net1, veth1)]:
     ip('netns', 'exec', net,
         '/usr/sbin/tc', 'qdisc', 'add', 'dev', iface, 'root', 'netem',
-        'corrupt', '5%',
-        'loss', '5%',
-        'duplicate', '5%',
+        'corrupt', str(packet_corruption)+'%',
+        'loss', str(packet_loss)+'%',
+        'duplicate', str(packet_duplicate)+'%',
     )
 
 # add a timeout

@@ -40,8 +40,6 @@ x86_64)
 	;;
 esac
 
-GENERATE_GCOV_REPORT=1
-
 #check to see if the host has the required packages to generate a gcov report
 check_gcov_env()
 {
@@ -50,7 +48,7 @@ check_gcov_env()
 		GENERATE_GCOV_REPORT=0
 	fi
 
-	# the gcov version much match the gcc version
+	# the gcov version must match the gcc version
 	GCC_VER=$(gcc -dumpfullversion)
 	GCOV_VER=$($GCOV_CMD -v | grep gcov | awk '{print $3}'| awk 'BEGIN {FS="-"}{print $1}')
 	if [ "$GCOV_VER" != "$GCC_VER" ]; then
@@ -81,25 +79,29 @@ check_gcov_env()
 	fi
 }
 
+# Check to see if the kconfig has the required configs to generate a coverage report
 check_gcov_conf()
 {
 	if ! grep -x "CONFIG_GCOV_PROFILE_RDS=y" "$kconfig" > /dev/null 2>&1; then
-		echo "Warning: CONFIG_GCOV_PROFILE_RDS should be enabled"
-		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
-			to correct this"
+		echo "INFO: CONFIG_GCOV_PROFILE_RDS should be enabled for coverage reports"
 		GENERATE_GCOV_REPORT=0
 	fi
 	if ! grep -x "CONFIG_GCOV_KERNEL=y" "$kconfig" > /dev/null 2>&1; then
-		echo "Warning: CONFIG_GCOV_KERNEL should be enabled"
-		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
-			to correct this"
+		echo "INFO: CONFIG_GCOV_KERNEL should be enabled for coverage reports"
 		GENERATE_GCOV_REPORT=0
 	fi
 	if grep -x "CONFIG_GCOV_PROFILE_ALL=y" "$kconfig" > /dev/null 2>&1; then
-		echo "Warning: CONFIG_GCOV_PROFILE_AL should not be enabled"
-		echo "Please run tools/testing/selftests/net/rds/config.sh and rebuild the kernel \
-			to correct this"
+		echo "INFO: CONFIG_GCOV_PROFILE_ALL should be disabled for coverage reports"
 		GENERATE_GCOV_REPORT=0
+	fi
+
+	if [ "$GENERATE_GCOV_REPORT" -eq 0 ]; then
+		echo "To enable gcov reports, please run "\
+			"\"tools/testing/selftests/net/rds/config.sh -g\" and rebuild the kernel"
+	else
+		# if we have the required kernel configs, proceed to check the environment to
+		# ensure we have the required gcov packages
+		check_gcov_env
 	fi
 }
 
@@ -164,24 +166,54 @@ check_env()
 	fi
 }
 
+LOG_DIR=/tmp/rds_logs
+PLOSS=0
+PCORRUPT=0
+PDUP=0
+GENERATE_GCOV_REPORT=1
+while getopts "d:l:c:u:" opt; do
+  case ${opt} in
+    d)
+      LOG_DIR=${OPTARG}
+      ;;
+    l)
+      PLOSS=${OPTARG}
+      ;;
+    c)
+      PCORRUPT=${OPTARG}
+      ;;
+    u)
+      PDUP=${OPTARG}
+      ;;
+    :)
+      echo "USAGE: run.sh [-d logdir] [-l packet_loss] [-c packet_corruption]" \
+           "[-u packet_duplcate] [-g]"
+      exit 1
+      ;;
+    ?)
+      echo "Invalid option: -${OPTARG}."
+      exit 1
+      ;;
+  esac
+done
+
+
 check_env
 check_conf
 
-check_gcov_env
 check_gcov_conf
-
 gflags=""
 if [ "$GENERATE_GCOV_REPORT" -eq 1 ]; then
 	gflags="-g"
+else
+	echo "Coverage report will be skipped"
 fi
 
 #if we are running in a python environment, we need to capture that
 #python bin so we can use the same python environment in the vm
 PY_CMD=$(which python3)
 
-LOG_DIR=/tmp/rds_logs
-rm -r "$LOG_DIR"
-
+rm -fr "$LOG_DIR"
 TRACE_FILE="${LOG_DIR}/rds-strace.txt"
 mkdir -p  "$LOG_DIR"
 
@@ -196,7 +228,7 @@ $QEMU_BINARY \
 	-kernel "${ksrc_dir}/arch/x86/boot/bzImage" \
 	-append "rootfstype=9p root=/dev/root rootflags=trans=virtio,version=9p2000.L rw \
 		console=ttyS0 init=${current_dir}/init.sh -d ${LOG_DIR} -p ${PY_CMD} ${gflags} \
-		panic=-1" \
+		-l ${PLOSS} -c ${PCORRUPT} -u ${PDUP} panic=-1" \
 	-display none \
 	-serial stdio \
 	-fsdev local,id=fsdev0,path=/,security_model=none,multidevs=remap \
