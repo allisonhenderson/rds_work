@@ -168,6 +168,7 @@ struct rds_connection {
 
 	u32			c_my_gen_num;
 	u32			c_peer_gen_num;
+	struct list_head	c_laddr_node;
 };
 
 static inline
@@ -780,6 +781,8 @@ void rds_conn_shutdown(struct rds_conn_path *cpath);
 void rds_conn_destroy(struct rds_connection *conn);
 void rds_conn_drop(struct rds_connection *conn);
 void rds_conn_path_drop(struct rds_conn_path *cpath, bool destroy);
+void rds_conn_laddr_list(struct net *net, struct in6_addr *laddr,
+			 struct list_head *laddr_conns);
 void rds_conn_connect_if_down(struct rds_connection *conn);
 void rds_conn_path_connect_if_down(struct rds_conn_path *cp);
 void rds_check_all_paths(struct rds_connection *conn);
