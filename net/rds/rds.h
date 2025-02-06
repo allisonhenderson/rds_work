@@ -772,6 +772,10 @@ struct rds_connection *rds_conn_create_outgoing(struct net *net,
 						const struct in6_addr *faddr,
 						struct rds_transport *trans,
 						u8 tos, gfp_t gfp, int dev_if);
+struct rds_connection *rds_conn_find(struct net *net, struct in6_addr *laddr,
+				     struct in6_addr *faddr,
+				     struct rds_transport *trans, u8 tos,
+				     int dev_if);
 void rds_conn_shutdown(struct rds_conn_path *cpath);
 void rds_conn_destroy(struct rds_connection *conn);
 void rds_conn_drop(struct rds_connection *conn);

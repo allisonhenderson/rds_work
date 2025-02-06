@@ -364,6 +364,22 @@ struct rds_connection *rds_conn_create_outgoing(struct net *net,
 }
 EXPORT_SYMBOL_GPL(rds_conn_create_outgoing);
 
+struct rds_connection *rds_conn_find(struct net *net, struct in6_addr *laddr,
+				     struct in6_addr *faddr,
+				     struct rds_transport *trans, u8 tos,
+				     int dev_if)
+{
+	struct rds_connection *conn;
+	struct hlist_head *head = rds_conn_bucket(laddr, faddr);
+
+	rcu_read_lock();
+	conn = rds_conn_lookup(net, head, laddr, faddr, trans, tos, dev_if);
+	rcu_read_unlock();
+
+	return conn;
+}
+EXPORT_SYMBOL_GPL(rds_conn_find);
+
 void rds_conn_shutdown(struct rds_conn_path *cp)
 {
 	struct rds_connection *conn = cp->cp_conn;
