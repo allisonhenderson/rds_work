@@ -54,6 +54,7 @@
 #define RDS_CONG_MONITOR		6
 #define RDS_GET_MR_FOR_DEST		7
 #define SO_RDS_TRANSPORT		8
+#define RDS_CONN_RESET			9
 
 /* Socket option to tap receive path latency
  *	SO_RDS: SO_RDS_MSG_RXPATH_LATENCY
@@ -388,6 +389,12 @@ struct rds_atomic_args {
 	};
 	__u64		flags;
 	__u64		user_token;
+};
+
+struct rds_reset {
+	u_int8_t	tos;
+	struct in_addr	src;
+	struct in_addr	dst;
 };
 
 struct rds_rdma_notify {
