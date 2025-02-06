@@ -104,6 +104,25 @@ static struct rds_connection *rds_conn_lookup(struct net *net,
 	return ret;
 }
 
+void rds_conn_laddr_list(struct net *net, struct in6_addr *laddr,
+		struct list_head *laddr_conns)
+{
+	struct rds_connection *conn;
+	struct hlist_head *head;
+	int i;
+
+	rcu_read_lock();
+
+	for (i = 0, head = rds_conn_hash; i < ARRAY_SIZE(rds_conn_hash);
+	     i++, head++) {
+		hlist_for_each_entry_rcu(conn, head, c_hash_node)
+			if (ipv6_addr_equal(&conn->c_laddr, laddr))
+				list_add(&conn->c_laddr_node, laddr_conns);
+	}
+
+	rcu_read_unlock();
+}
+
 /*
  * This is called by transports as they're bringing down a connection.
  * It clears partial message state so that the transport can start sending
