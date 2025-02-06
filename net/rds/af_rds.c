@@ -357,6 +357,37 @@ static int rds_cong_monitor(struct rds_sock *rs, sockptr_t optval, int optlen)
 	return ret;
 }
 
+static int rds_user_reset(struct rds_sock *rs, sockptr_t optval, int optlen)
+{
+	struct rds_reset reset;
+	struct rds_connection *conn;
+	struct in6_addr src6, dst6;
+
+	if (optlen != sizeof(struct rds_reset))
+		return -EINVAL;
+
+	if (copy_from_sockptr(&reset, optval,
+			      sizeof(struct rds_reset)))
+		return -EFAULT;
+
+	ipv6_addr_set_v4mapped(reset.dst.s_addr, &dst6);
+	conn = rds_conn_find(sock_net(rds_rs_to_sk(rs)), &src6, &dst6,
+			     rs->rs_transport, reset.tos,
+			     rs->rs_bound_scope_id);
+
+	if (conn) {
+		bool is_tcp = conn->c_trans->t_type == RDS_TRANS_TCP;
+
+		pr_notice("Resetting RDS/%s connection <%pI4,%pI4,%d>\n",
+			  is_tcp ? "TCP" : "IB",
+			  &reset.src.s_addr,
+			  &reset.dst.s_addr, conn->c_tos);
+		rds_conn_drop(conn);
+	}
+
+	return 0;
+}
+
 static int rds_set_transport(struct rds_sock *rs, sockptr_t optval, int optlen)
 {
 	int t_type;
@@ -458,6 +489,9 @@ static int rds_setsockopt(struct socket *sock, int level, int optname,
 		break;
 	case RDS_CONG_MONITOR:
 		ret = rds_cong_monitor(rs, optval, optlen);
+		break;
+	case RDS_CONN_RESET:
+		ret = rds_user_reset(rs, optval, optlen);
 		break;
 	case SO_RDS_TRANSPORT:
 		lock_sock(sock->sk);
