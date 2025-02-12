@@ -63,11 +63,41 @@ void rds_tcp_keepalive(struct socket *sock)
  * smaller ip address, we recycle conns in RDS_CONN_ERROR on the passive side
  * by moving them to CONNECTING in this function.
  */
-static
-struct rds_tcp_connection *rds_tcp_accept_one_path(struct rds_connection *conn)
+static struct rds_tcp_connection *
+rds_tcp_accept_one_path(struct rds_connection *conn, struct socket *sock)
 {
-	int i;
-	int npaths = max_t(int, 1, conn->c_npaths);
+	union {
+		struct sockaddr_storage storage;
+		struct sockaddr addr;
+		struct sockaddr_in sin;
+		struct sockaddr_in6 sin6;
+	} saddr;
+	int sport, npaths, i_min, i_max, i;
+
+	if (conn->c_with_sport_idx &&
+	    kernel_getpeername(sock, &saddr.addr) == 0) {
+		/* cp->cp_index is encoded in lowest bits of source-port */
+		switch (saddr.addr.sa_family) {
+			case AF_INET:
+				sport = ntohs(saddr.sin.sin_port);
+				break;
+			case AF_INET6:
+				sport = ntohs(saddr.sin6.sin6_port);
+				break;
+			default:
+				sport = -1;
+		}
+	} else
+		sport = -1;
+
+	npaths = max_t(int, 1, conn->c_npaths);
+
+	if (sport >= 0) {
+		i_min = i_max = sport % npaths;
+	} else {
+		i_min = 0;
+		i_max = npaths - 1;
+	}
 
 	/* for mprds, all paths MUST be initiated by the peer
 	 * with the smaller address.
@@ -82,7 +112,7 @@ struct rds_tcp_connection *rds_tcp_accept_one_path(struct rds_connection *conn)
 		return NULL;
 	}
 
-	for (i = 0; i < npaths; i++) {
+	for (i = i_min; i <= i_max; i++) {
 		struct rds_conn_path *cp = &conn->c_path[i];
 
 		if (rds_conn_path_transition(cp, RDS_CONN_DOWN,
@@ -92,6 +122,7 @@ struct rds_tcp_connection *rds_tcp_accept_one_path(struct rds_connection *conn)
 			return cp->cp_transport_data;
 		}
 	}
+
 	return NULL;
 }
 
@@ -194,7 +225,7 @@ int rds_tcp_accept_one(struct socket *sock)
 	 * If the client reboots, this conn will need to be cleaned up.
 	 * rds_tcp_state_change() will do that cleanup
 	 */
-	rs_tcp = rds_tcp_accept_one_path(conn);
+	rs_tcp = rds_tcp_accept_one_path(conn, new_sock);
 	if (!rs_tcp)
 		goto rst_nsk;
 	mutex_lock(&rs_tcp->t_conn_path_lock);
