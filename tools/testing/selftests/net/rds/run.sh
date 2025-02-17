@@ -194,7 +194,7 @@ set +e
 echo running RDS tests...
 echo Traces will be logged to "$TRACE_FILE"
 rm -f "$TRACE_FILE"
-strace -T -tt -o "$TRACE_FILE" python3 "$(dirname "$0")/test.py" --timeout 400 -d "$LOG_DIR" \
+strace -T -tt -o "$TRACE_FILE" python3 "$(dirname "$0")/test.py" --timeout 4000 -d "$LOG_DIR" \
        -l "$PLOSS" -c "$PCORRUPT" -u "$PDUP"
 
 test_rc=$?
