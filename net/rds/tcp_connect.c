@@ -221,6 +221,47 @@ out:
 	return ret;
 }
 
+static void rds_tcp_conn_path_drain(struct rds_conn_path *cp)
+{
+	struct rds_tcp_connection *tc = cp->cp_transport_data;
+	struct socket *sock = tc->t_sock;
+	unsigned int rounds;
+	DECLARE_WAITQUEUE(wait, current);
+
+	sock->ops->shutdown(sock, SHUT_WR);
+
+	/* after sending FIN,
+	 * wait until we processed all incoming messages
+	 * and we're sure that there won't be any more:
+	 * i.e. state CLOSING, TIME_WAIT, CLOSE_WAIT,
+	 * LAST_ACK, or CLOSE (RFC 793).
+	 *
+	 * Give up waiting after 5 seconds and allow messages
+	 * to theoretically get dropped, if the TCP transition
+	 * didn't happen.
+	 */
+	rounds = 0;
+	add_wait_queue(&tc->t_recv_done_waitq, &wait);
+	do {
+		/* we need to ensure messages are dequeued here
+		 * since "rds_recv_worker" only dispatches messages
+		 * while the connection is still in RDS_CONN_UP
+		 * and there is no guarantee that "rds_tcp_data_ready"
+		 * was called nor that "sk_data_ready" still points to it.
+		 */
+		rds_tcp_recv_path(cp);
+	} while (!wait_event_timeout(tc->t_recv_done_waitq,
+				     (sock->sk->sk_state == TCP_CLOSING ||
+				      sock->sk->sk_state == TCP_TIME_WAIT ||
+				      sock->sk->sk_state == TCP_CLOSE_WAIT ||
+				      sock->sk->sk_state == TCP_LAST_ACK ||
+				      sock->sk->sk_state == TCP_CLOSE) &&
+				     skb_queue_empty_lockless(&sock->sk->sk_receive_queue),
+				     msecs_to_jiffies(100)) &&
+		 ++rounds < 10);
+	remove_wait_queue(&tc->t_recv_done_waitq, &wait);
+}
+
 /*
  * Before killing the tcp socket this needs to serialize with callbacks.  The
  * caller has already grabbed the sending sem so we're serialized with other
@@ -234,7 +275,6 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 {
 	struct rds_tcp_connection *tc = cp->cp_transport_data;
 	struct socket *sock = tc->t_sock;
-	unsigned int rounds;
 
 	rdsdebug("shutting down conn %p tc %p sock %p\n",
 		 cp->cp_conn, tc, sock);
@@ -243,36 +283,11 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 		if (rds_destroy_pending(cp->cp_conn))
 			sock_no_linger(sock->sk);
 
-		sock->ops->shutdown(sock, SHUT_WR);
+		if (!skb_queue_empty_lockless(&sock->sk->sk_receive_queue))
+			rds_tcp_conn_path_drain(cp);
 
-		/* after sending FIN,
-		 * wait until we processed all incoming messages
-		 * and we're sure that there won't be any more:
-		 * i.e. state CLOSING, TIME_WAIT, CLOSE_WAIT,
-		 * LAST_ACK, or CLOSE (RFC 793).
-		 *
-		 * Give up waiting after 5 seconds and allow messages
-		 * to theoretically get dropped, if the TCP transition
-		 * didn't happen.
-		 */
-		rounds = 0;
-		do {
-			/* we need to ensure messages are dequeued here
-			 * since "rds_recv_worker" only dispatches messages
-			 * while the connection is still in RDS_CONN_UP
-			 * and there is no guarantee that "rds_tcp_data_ready"
-			 * was called nor that "sk_data_ready" still points to it.
-			 */
-			rds_tcp_recv_path(cp);
-		} while (!wait_event_timeout(tc->t_recv_done_waitq,
-					     (sock->sk->sk_state == TCP_CLOSING ||
-					      sock->sk->sk_state == TCP_TIME_WAIT ||
-					      sock->sk->sk_state == TCP_CLOSE_WAIT ||
-					      sock->sk->sk_state == TCP_LAST_ACK ||
-					      sock->sk->sk_state == TCP_CLOSE) &&
-					     skb_queue_empty_lockless(&sock->sk->sk_receive_queue),
-					     msecs_to_jiffies(100)) &&
-			 ++rounds < 50);
+		sock->ops->shutdown(sock, RCV_SHUTDOWN | SEND_SHUTDOWN);
+
 		lock_sock(sock->sk);
 
 		/* discard messages that the peer received already */
