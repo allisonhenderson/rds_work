@@ -739,7 +739,6 @@ void rds_for_each_conn_info(struct socket *sock, unsigned int len,
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_for_each_conn_info);
-
 static void rds_walk_conn_path_info(struct socket *sock, unsigned int len,
 				    struct rds_info_iterator *iter,
 				    struct rds_info_lengths *lens,
@@ -938,7 +937,7 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 		rcu_read_unlock();
 		return;
 	}
-	queue_work(cp->cp_wq, &cp->cp_down_w);
+	rds_cond_queue_shutdown_work(cp);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_drop);
