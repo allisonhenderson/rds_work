@@ -170,8 +170,7 @@ void rds_connect_worker(struct work_struct *work)
 
 	if (cp->cp_index > 0 &&
 	    rds_addr_cmp(&cp->cp_conn->c_laddr, &cp->cp_conn->c_faddr) >= 0)
-		return;
-	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
+		goto out;
 	ret = rds_conn_path_transition(cp, RDS_CONN_DOWN, RDS_CONN_CONNECTING);
 	if (ret) {
 		ret = conn->c_trans->conn_path_connect(cp);
@@ -187,6 +186,8 @@ void rds_connect_worker(struct work_struct *work)
 				rds_conn_path_error(cp, "connect failed\n");
 		}
 	}
+out:
+	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
 }
 
 void rds_send_worker(struct work_struct *work)
