@@ -95,6 +95,7 @@ enum {
 #define	RDS_DESTROY_PENDING	4
 #define RDS_SEND_WORK_QUEUED	5
 #define RDS_RECV_WORK_QUEUED	6
+#define RDS_SHUTDOWN_WORK_QUEUED 7
 
 /* Max number of multipaths per RDS connection. Must be a power of 2 */
 #define	RDS_MPATH_WORKERS	8
@@ -805,6 +806,22 @@ void __rds_conn_path_error(struct rds_conn_path *cp, const char *, ...);
 	__rds_conn_path_error(cp, KERN_WARNING "RDS: " fmt)
 
 extern struct workqueue_struct *rds_wq;
+
+static inline void rds_cond_queue_shutdown_work(struct rds_conn_path *cp)
+{
+	if (!test_and_set_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
+		queue_work(cp->cp_wq, &cp->cp_down_w);
+}
+
+static inline void rds_clear_shutdown_pending_work_bit(struct rds_conn_path *cp)
+{
+	/* clear_bit() does not imply a memory barrier */
+	smp_mb__before_atomic();
+	clear_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags);
+	/* clear_bit() does not imply a memory barrier */
+	smp_mb__after_atomic();
+}
+
 static inline void rds_cond_queue_reconnect_work(struct rds_conn_path *cp, unsigned long delay)
 {
 	if (!test_and_set_bit(RDS_RECONNECT_PENDING, &cp->cp_flags))
