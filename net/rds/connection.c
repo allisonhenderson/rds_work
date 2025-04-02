@@ -472,6 +472,10 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 	 * conn - the reconnect is always triggered by the active peer. */
 	cancel_delayed_work_sync(&cp->cp_conn_w);
 	rds_clear_reconnect_pending_work_bit(cp);
+
+	if (conn->c_trans->conn_slots_available)
+		conn->c_trans->conn_slots_available(conn);
+
 	rcu_read_lock();
 	if (!hlist_unhashed(&conn->c_hash_node)) {
 		rcu_read_unlock();
