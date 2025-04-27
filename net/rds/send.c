@@ -1312,23 +1312,6 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 			goto out;
 		}
 		if (conn->c_trans->t_mp_capable) {
-			/* c_npaths == 0 if we have not talked to this peer
-			 * before.  Initiate a connection request to the
-			 * peer right away.
-			 */
-			if (!conn->c_npaths &&
-			    rds_conn_path_down(&conn->c_path[0])) {
-				/* Ensures that only one request is queued.  And
-				 * rds_send_ping() ensures that only one ping is
-				 * outstanding.
-				 */
-				if (!test_and_set_bit(RDS_RECONNECT_PENDING,
-						      &conn->c_path[0].cp_flags))
-					queue_delayed_work(conn->c_path[0].cp_wq,
-							   &conn->c_path[0].cp_conn_w, 0);
-				rds_send_ping(conn, 0);
-			}
-
 			/* Use c_path[0] until we learn that
 			 * the peer supports more (c_npaths > 1)
 			 */
@@ -1338,6 +1321,23 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 		}
 		rs->rs_conn = conn;
 		rs->rs_conn_path = cpath;
+	}
+
+	/* c_npaths == 0 if we have not talked to this peer
+	 * before.  Initiate a connection request to the
+	 * peer right away.
+	 */
+	if (conn->c_trans->t_mp_capable &&
+	    !rds_conn_path_up(&conn->c_path[0])) {
+		/* Ensures that only one request is queued.  And
+		 * rds_send_ping() ensures that only one ping is
+		 * outstanding.
+		 */
+		if (!test_and_set_bit(RDS_RECONNECT_PENDING,
+				      &conn->c_path[0].cp_flags))
+			queue_delayed_work(conn->c_path[0].cp_wq,
+					   &conn->c_path[0].cp_conn_w, 0);
+		rds_send_ping(conn, 0);
 	}
 
 	rm->m_conn_path = cpath;
