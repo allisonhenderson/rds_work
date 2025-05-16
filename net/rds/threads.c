@@ -136,12 +136,13 @@ void rds_queue_reconnect(struct rds_conn_path *cp)
 	    rds_addr_cmp(&conn->c_laddr, &conn->c_faddr) >= 0)
 		return;
 
-	set_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
 	if (cp->cp_reconnect_jiffies == 0) {
 		cp->cp_reconnect_jiffies = rds_sysctl_reconnect_min_jiffies;
 		rcu_read_lock();
-		if (!rds_destroy_pending(cp->cp_conn))
-			queue_delayed_work(cp->cp_wq, &cp->cp_conn_w, 0);
+		if (!rds_destroy_pending(cp->cp_conn)) {
+			if (!test_and_set_bit(RDS_RECONNECT_PENDING, &cp->cp_flags))
+				queue_delayed_work(cp->cp_wq, &cp->cp_conn_w, 0);
+		}
 		rcu_read_unlock();
 		return;
 	}
@@ -152,8 +153,9 @@ void rds_queue_reconnect(struct rds_conn_path *cp)
 		 conn, &conn->c_laddr, &conn->c_faddr);
 	rcu_read_lock();
 	if (!rds_destroy_pending(cp->cp_conn))
-		queue_delayed_work(cp->cp_wq, &cp->cp_conn_w,
-				   rand % cp->cp_reconnect_jiffies);
+		if (!test_and_set_bit(RDS_RECONNECT_PENDING, &cp->cp_flags))
+			queue_delayed_work(cp->cp_wq, &cp->cp_conn_w,
+					   rand % cp->cp_reconnect_jiffies);
 	rcu_read_unlock();
 
 	cp->cp_reconnect_jiffies = min(cp->cp_reconnect_jiffies * 2,
