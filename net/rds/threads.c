@@ -249,6 +249,7 @@ void rds_shutdown_worker(struct work_struct *work)
 						cp_down_w);
 
 	rds_conn_shutdown(cp);
+	clear_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags);
 }
 
 void rds_threads_exit(void)
