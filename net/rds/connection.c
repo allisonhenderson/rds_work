@@ -928,7 +928,7 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 		rcu_read_unlock();
 		return;
 	}
-	if (!test_and_set_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
+	//if (!test_and_set_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
 		mod_delayed_work(cp->cp_wq, &cp->cp_up_or_down_w, 0);
 	rcu_read_unlock();
 }
