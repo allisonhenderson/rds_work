@@ -1336,7 +1336,7 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 		if (!test_and_set_bit(RDS_RECONNECT_PENDING,
 				      &conn->c_path[0].cp_flags))
 			queue_delayed_work(conn->c_path[0].cp_wq,
-					   &conn->c_path[0].cp_conn_w, 0);
+					   &conn->c_path[0].cp_up_or_down_w, 0);
 		rds_send_ping(conn, 0);
 	}
 

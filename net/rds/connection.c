@@ -45,6 +45,9 @@
 #define RDS_CONNECTION_HASH_ENTRIES (1 << RDS_CONNECTION_HASH_BITS)
 #define RDS_CONNECTION_HASH_MASK (RDS_CONNECTION_HASH_ENTRIES - 1)
 
+static bool rds_wq_strictly_ordered = true;
+module_param(rds_wq_strictly_ordered, bool, 0644);
+
 /* converting this to RCU is a chore for another day.. */
 static DEFINE_SPINLOCK(rds_conn_lock);
 static unsigned long rds_conn_count;
@@ -159,8 +162,7 @@ static void __rds_conn_path_init(struct rds_connection *conn,
 	cp->cp_conn->c_proposed_version = RDS_PROTOCOL_VERSION;
 	INIT_DELAYED_WORK(&cp->cp_send_w, rds_send_worker);
 	INIT_DELAYED_WORK(&cp->cp_recv_w, rds_recv_worker);
-	INIT_DELAYED_WORK(&cp->cp_conn_w, rds_connect_worker);
-	INIT_WORK(&cp->cp_down_w, rds_shutdown_worker);
+	INIT_DELAYED_WORK(&cp->cp_up_or_down_w, rds_up_or_down_worker);
 	mutex_init(&cp->cp_cm_lock);
 	cp->cp_flags = 0;
 	init_waitqueue_head(&cp->cp_up_waitq);
@@ -285,7 +287,13 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		__rds_conn_path_init(conn, &conn->c_path[i],
 				     is_outgoing);
 		conn->c_path[i].cp_index = i;
-		conn->c_path[i].cp_wq = alloc_ordered_workqueue("krds_cp_wq#%lu/%d", 0,
+		if (rds_wq_strictly_ordered)
+			conn->c_path[i].cp_wq =
+				alloc_ordered_workqueue("krds_cp_wq#%ld/%d", 0,
+							rds_conn_count, i);
+		else
+			conn->c_path[i].cp_wq = alloc_workqueue("krds_cp_wq#%ld/%d", 0,
+								RDS_CP_WQ_MAX_ACTIVE,
 								rds_conn_count, i);
 		if (!conn->c_path[i].cp_wq) {
 			while (--i >= 0)
@@ -452,7 +460,6 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 	 * The passive side of an IB loopback connection is never added
 	 * to the conn hash, so we never trigger a reconnect on this
 	 * conn - the reconnect is always triggered by the active peer. */
-	cancel_delayed_work_sync(&cp->cp_conn_w);
 
 	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
 	rcu_read_lock();
@@ -485,7 +492,7 @@ static void rds_conn_path_destroy(struct rds_conn_path *cp)
 	cancel_delayed_work_sync(&cp->cp_recv_w);
 
 	rds_conn_path_drop(cp, true);
-	flush_work(&cp->cp_down_w);
+	flush_delayed_work(&cp->cp_up_or_down_w);
 
 	/* tear down queued messages */
 	list_for_each_entry_safe(rm, rtmp,
@@ -500,8 +507,7 @@ static void rds_conn_path_destroy(struct rds_conn_path *cp)
 
 	WARN_ON(delayed_work_pending(&cp->cp_send_w));
 	WARN_ON(delayed_work_pending(&cp->cp_recv_w));
-	WARN_ON(delayed_work_pending(&cp->cp_conn_w));
-	WARN_ON(work_pending(&cp->cp_down_w));
+	WARN_ON(delayed_work_pending(&cp->cp_up_or_down_w));
 
 	cp->cp_conn->c_trans->conn_free(cp->cp_transport_data);
 
@@ -923,7 +929,7 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 		return;
 	}
 	if (!test_and_set_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
-		queue_work(cp->cp_wq, &cp->cp_down_w);
+		mod_delayed_work(cp->cp_wq, &cp->cp_up_or_down_w, 0);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_drop);
