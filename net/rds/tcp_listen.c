@@ -73,8 +73,7 @@ rds_tcp_accept_one_path(struct rds_connection *conn, struct socket *sock)
 	} saddr;
 	int sport, npaths, i_min, i_max, i;
 
-	if (conn->c_with_sport_idx &&
-	    kernel_getpeername(sock, &saddr.addr) == 0) {
+	if (conn->c_with_sport_idx && sock->ops->getname(sock, &saddr.addr, 2) >= 0) {
 		/* cp->cp_index is encoded in lowest bits of source-port */
 		switch (saddr.addr.sa_family) {
 		case AF_INET:
