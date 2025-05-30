@@ -176,15 +176,8 @@ static void rds_connect_worker(struct rds_conn_path *cp,
 		ret = conn->c_trans->conn_path_connect(cp);
 		rdsdebug("conn %p for %pI6c to %pI6c dispatched, ret %d\n",
 			 conn, &conn->c_laddr, &conn->c_faddr, ret);
-
-		if (ret) {
-			if (rds_conn_path_transition(cp,
-						     RDS_CONN_CONNECTING,
-						     RDS_CONN_DOWN))
-				rds_queue_reconnect(cp);
-			else
-				rds_conn_path_error(cp, "connect failed\n");
-		}
+		if (ret)
+			rds_conn_path_drop(cp, 0);
 	}
 out:
 	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
