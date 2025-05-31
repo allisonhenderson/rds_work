@@ -87,7 +87,14 @@ void rds_connect_path_complete(struct rds_conn_path *cp, int curr)
 		 cp->cp_conn, &cp->cp_conn->c_laddr, &cp->cp_conn->c_faddr);
 
 	cp->cp_reconnect_jiffies = 0;
-	set_bit(0, &cp->cp_conn->c_map_queued);
+	/* Congestion map gets sent everytime a connection is re-established.
+	 * Here, we are making sure that the congestion map gets sent on
+	 * connection path zero. To avoid congestion map corruption, when it
+	 * is sent via multiple paths.
+	 */
+
+	if (!cp->cp_index)
+		set_bit(0, &cp->cp_conn->c_map_queued);
 	rcu_read_lock();
 	if (!rds_destroy_pending(cp->cp_conn)) {
 		queue_delayed_work(cp->cp_wq, &cp->cp_send_w, 0);

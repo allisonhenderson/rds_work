@@ -215,9 +215,11 @@ restart:
 
 		/*
 		 * If between sending messages, we can send a pending congestion
-		 * map update.
+		 * map update.  Congestion map should be sent only over
+		 * connection path zero, to avoid congestion map corruption.
 		 */
-		if (!rm && test_and_clear_bit(0, &conn->c_map_queued)) {
+		if (!cp->cp_index && !rm &&
+		    test_and_clear_bit(0, &conn->c_map_queued)) {
 			rm = rds_cong_update_alloc(conn);
 			if (IS_ERR(rm)) {
 				ret = PTR_ERR(rm);
