@@ -278,9 +278,15 @@ static int rds_tcp_read_sock(struct rds_conn_path *cp, gfp_t gfp)
 	rdsdebug("tcp_read_sock for tc %p gfp 0x%x returned %d\n", tc, gfp,
 		 desc.error);
 
-	if (skb_queue_empty_lockless(&sock->sk->sk_receive_queue) &&
-	    wq_has_sleeper(&tc->t_recv_done_waitq))
+	if (skb_queue_empty_lockless(&sock->sk->sk_receive_queue)) {
+	    if( wq_has_sleeper(&tc->t_recv_done_waitq)) {
+		printk("%s waking sleepers for t_recv_done_waitq:%p\n", __func__, &tc->t_recv_done_waitq);
 		wake_up(&tc->t_recv_done_waitq);
+	    }
+	    else if(test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
+		    printk("%s no sleepers for t_recv_done_waitq:%p\n", __func__, &tc->t_recv_done_waitq);
+	
+	}
 
 	return desc.error;
 }

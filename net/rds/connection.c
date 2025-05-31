@@ -949,8 +949,15 @@ void rds_conn_path_connect_if_down(struct rds_conn_path *cp)
 		rcu_read_unlock();
 		return;
 	}
-	if (rds_conn_path_down(cp))
+	if (rds_conn_path_down(cp)) {
+                 //printk("%s:%s: on cp:%p with cp_flags:0x%lX in state:%s(%d)\n",
+                 //func, __func__, cp, cp->cp_flags, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 		rds_queue_reconnect(cp);
+	}
+	else	
+		printk("%s: connect DENIED on cp:%p with cp_flags:0x%lX in state:(%d)\n",
+                __func__, cp, cp->cp_flags, atomic_read(&cp->cp_state));
+
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_connect_if_down);
