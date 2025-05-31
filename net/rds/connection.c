@@ -401,6 +401,7 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 {
 	struct rds_connection *conn = cp->cp_conn;
 
+	printk("%s: Enter: state:%s(%d) on cp:%p cp->cp_flags:%lX\n", __func__, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state), cp, cp->cp_flags);
 	/* shut it down unless it's down already */
 	if (!rds_conn_path_transition(cp, RDS_CONN_DOWN, RDS_CONN_DOWN)) {
 		/*
@@ -420,18 +421,23 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 			rds_conn_path_error(cp,
 					    "shutdown called in state %d\n",
 					    atomic_read(&cp->cp_state));
+			printk("%s: shutdown called for cp:%p in state %s:%d\n", __func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 			mutex_unlock(&cp->cp_cm_lock);
 			return;
 		}
 		mutex_unlock(&cp->cp_cm_lock);
 
+		printk("%s: waiting for queues to empty for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 		wait_event(cp->cp_waitq,
 			   !test_bit(RDS_IN_XMIT, &cp->cp_flags));
 		wait_event(cp->cp_waitq,
 			   !test_bit(RDS_RECV_REFILL, &cp->cp_flags));
+		printk("%s: Queue wait done for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 
 		conn->c_trans->conn_path_shutdown(cp);
+		printk("%s: conn_path_shutdown done for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 		rds_conn_path_reset(cp);
+		printk("%s: paths reset for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 
 		if (!rds_conn_path_transition(cp, RDS_CONN_DISCONNECTING,
 					      RDS_CONN_DOWN) &&
@@ -452,6 +458,7 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 					    "to state DOWN, current state "
 					    "is %d\n", __func__,
 					    atomic_read(&cp->cp_state));
+			printk("%s: failed to transition to state DOWN for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 			return;
 		}
 	}
@@ -461,6 +468,7 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 	 * to the conn hash, so we never trigger a reconnect on this
 	 * conn - the reconnect is always triggered by the active peer. */
 
+	printk("%s: Start reconnect for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
 	rcu_read_lock();
 	if (!hlist_unhashed(&conn->c_hash_node)) {
@@ -472,6 +480,7 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 
 	if (conn->c_trans->conn_slots_available)
 		conn->c_trans->conn_slots_available(conn);
+	printk("%s: Exit for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 }
 
 /* destroy a single rds_conn_path. rds_conn_destroy() iterates over
@@ -925,8 +934,10 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 		rcu_read_unlock();
 		return;
 	}
-	if (!test_and_set_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
+	if (!test_and_set_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags)) {
+		printk("%s: Enter: state:%s(%d) on cp:%p cp->cp_flags:%lX\n", __func__, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state), cp, cp->cp_flags);
 		mod_delayed_work(cp->cp_wq, &cp->cp_up_or_down_w, 0);
+	}
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_drop);

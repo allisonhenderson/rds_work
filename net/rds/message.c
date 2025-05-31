@@ -185,16 +185,17 @@ void rds_message_put(struct rds_message *rm)
 }
 EXPORT_SYMBOL_GPL(rds_message_put);
 
-void rds_message_populate_header(struct rds_header *hdr, __be16 sport,
-				 __be16 dport, u64 seq)
+void rds_message_populate_header_wrap(struct rds_header *hdr, __be16 sport,
+				 __be16 dport, u64 seq, bool dbg, const char *func, int line)
 {
+	if(dbg) printk("%s:%s:%d: sport:%d dport:%d seq:%llu\n", func, __func__, line, be16_to_cpu(sport), be16_to_cpu(dport), seq);
 	hdr->h_flags = 0;
 	hdr->h_sport = sport;
 	hdr->h_dport = dport;
 	hdr->h_sequence = cpu_to_be64(seq);
 	hdr->h_exthdr[0] = RDS_EXTHDR_NONE;
 }
-EXPORT_SYMBOL_GPL(rds_message_populate_header);
+EXPORT_SYMBOL_GPL(rds_message_populate_header_wrap);
 
 int rds_message_add_extension(struct rds_header *hdr, unsigned int type,
 			      const void *data, unsigned int len)

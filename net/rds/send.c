@@ -866,6 +866,7 @@ static int rds_send_queue_rm(struct rds_sock *rs, struct rds_connection *conn,
 {
 	unsigned long flags;
 	u32 len;
+	bool dbg = test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags);
 
 	if (*queued)
 		goto out;
@@ -903,7 +904,8 @@ static int rds_send_queue_rm(struct rds_sock *rs, struct rds_connection *conn,
 
 		/* The code ordering is a little weird, but we're
 		   trying to minimize the time we hold c_lock */
-		rds_message_populate_header(&rm->m_inc.i_hdr, sport, dport, 0);
+		//rds_message_populate_header_wrap(&rm->m_inc.i_hdr, sport, dport, 0, dbg, __func__, __LINE__);
+		rds_message_populate_header(&rm->m_inc.i_hdr, sport, dport, 0);	
 		rm->m_inc.i_conn = conn;
 		rm->m_inc.i_conn_path = cp;
 		rds_message_addref(rm);
@@ -914,9 +916,9 @@ static int rds_send_queue_rm(struct rds_sock *rs, struct rds_connection *conn,
 		set_bit(RDS_MSG_ON_CONN, &rm->m_flags);
 		spin_unlock(&cp->cp_lock);
 
-		rdsdebug("queued msg %p len %d, rs %p bytes %d seq %llu\n",
-			 rm, len, rs, rs->rs_snd_bytes,
-			 (unsigned long long)be64_to_cpu(rm->m_inc.i_hdr.h_sequence));
+		if(dbg) printk("%s: queued msg %p len %d, rs %p bytes %d seq %llu cp_next_tx_seq:%llu on cp:%p\n",
+			 __func__, rm, len, rs, rs->rs_snd_bytes,
+			 (unsigned long long)be64_to_cpu(rm->m_inc.i_hdr.h_sequence), cp->cp_next_tx_seq, cp);
 
 		*queued = 1;
 	}
@@ -1483,8 +1485,8 @@ rds_send_probe(struct rds_conn_path *cp, __be16 sport,
 	rm->m_inc.i_conn = cp->cp_conn;
 	rm->m_inc.i_conn_path = cp;
 
-	rds_message_populate_header(&rm->m_inc.i_hdr, sport, dport,
-				    cp->cp_next_tx_seq);
+	rds_message_populate_header_wrap(&rm->m_inc.i_hdr, sport, dport,
+				    cp->cp_next_tx_seq, test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags), __func__, __LINE__);
 	rm->m_inc.i_hdr.h_flags |= h_flags;
 	cp->cp_next_tx_seq++;
 

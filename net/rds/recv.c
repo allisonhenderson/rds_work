@@ -316,6 +316,7 @@ void rds_recv_incoming(struct rds_connection *conn, struct in6_addr *saddr,
 	struct sock *sk;
 	unsigned long flags;
 	struct rds_conn_path *cp;
+	bool dbg;
 
 	inc->i_conn = conn;
 	inc->i_rx_jiffies = jiffies;
@@ -324,8 +325,9 @@ void rds_recv_incoming(struct rds_connection *conn, struct in6_addr *saddr,
 	else
 		cp = &conn->c_path[0];
 
-	rdsdebug("conn %p next %llu inc %p seq %llu len %u sport %u dport %u "
-		 "flags 0x%x rx_jiffies %lu\n", conn,
+	dbg = test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags);
+	if (dbg) printk("%s: cp:%p conn %p next %llu inc %p seq %llu len %u sport %u dport %u "
+		 "flags 0x%x rx_jiffies %lu\n", __func__, cp, conn,
 		 (unsigned long long)cp->cp_next_rx_seq,
 		 inc,
 		 (unsigned long long)be64_to_cpu(inc->i_hdr.h_sequence),

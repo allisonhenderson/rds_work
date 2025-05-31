@@ -276,7 +276,7 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 			 * was called nor that "sk_data_ready" still points to it.
 			 */
 			rds_tcp_recv_path(cp);
-			printk("%s waiting on t_recv_done_waitq:%p for cp:%p round:%d\n", __func__,  &tc->t_recv_done_waitq, cp, rounds);
+			printk("%s: waiting on t_recv_done_waitq:%p for cp:%p round:%d\n", __func__,  &tc->t_recv_done_waitq, cp, rounds);
 		} while (!wait_event_timeout(tc->t_recv_done_waitq,
 					     (sock->sk->sk_state == TCP_CLOSING ||
 					      sock->sk->sk_state == TCP_TIME_WAIT ||
@@ -286,7 +286,7 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 					     skb_queue_empty_lockless(&sock->sk->sk_receive_queue),
 					     msecs_to_jiffies(100)) &&
 			 ++rounds < 50);
-		printk("%s Wait done for t_recv_done_waitq:%p for cp:%p round:%d\n", __func__,  &tc->t_recv_done_waitq, cp, rounds);
+		printk("%s: Wait done for t_recv_done_waitq:%p for cp:%p round:%d\n", __func__,  &tc->t_recv_done_waitq, cp, rounds);
 		lock_sock(sock->sk);
 
 		/* discard messages that the peer received already */

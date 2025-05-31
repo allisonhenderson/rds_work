@@ -83,8 +83,8 @@ void rds_connect_path_complete(struct rds_conn_path *cp, int curr)
 		return;
 	}
 
-	rdsdebug("conn %p for %pI6c to %pI6c complete\n",
-		 cp->cp_conn, &cp->cp_conn->c_laddr, &cp->cp_conn->c_faddr);
+	printk("%s: cp:%p conn %p for %pI6c to %pI6c complete\n",
+		 __func__, cp, cp->cp_conn, &cp->cp_conn->c_laddr, &cp->cp_conn->c_faddr);
 
 	cp->cp_reconnect_jiffies = 0;
 	/* Congestion map gets sent everytime a connection is re-established.
@@ -181,8 +181,8 @@ static void rds_connect_worker(struct rds_conn_path *cp,
 	ret = rds_conn_path_transition(cp, RDS_CONN_DOWN, RDS_CONN_CONNECTING);
 	if (ret) {
 		ret = conn->c_trans->conn_path_connect(cp);
-		rdsdebug("conn %p for %pI6c to %pI6c dispatched, ret %d\n",
-			 conn, &conn->c_laddr, &conn->c_faddr, ret);
+		printk("%s: cp;%p conn %p for %pI6c to %pI6c dispatched, ret %d\n",
+			 __func__, cp, conn, &conn->c_laddr, &conn->c_faddr, ret);
 		if (ret)
 			rds_conn_path_drop(cp, 0);
 	}

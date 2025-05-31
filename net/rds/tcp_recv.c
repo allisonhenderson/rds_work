@@ -161,8 +161,9 @@ static int rds_tcp_data_recv(read_descriptor_t *desc, struct sk_buff *skb,
 	struct rds_tcp_incoming *tinc = tc->t_tinc;
 	struct sk_buff *clone;
 	size_t left = len, to_copy;
+	bool dbg = test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags);
 
-	rdsdebug("tcp data tc %p skb %p offset %u len %zu\n", tc, skb, offset,
+	if (dbg) printk("%s: tcp data cp:%p tc %p skb %p offset %u len %zu\n", __func__, cp, tc, skb, offset,
 		 len);
 
 	/*
@@ -193,8 +194,8 @@ static int rds_tcp_data_recv(read_descriptor_t *desc, struct sk_buff *skb,
 
 		if (left && tc->t_tinc_hdr_rem) {
 			to_copy = min(tc->t_tinc_hdr_rem, left);
-			rdsdebug("copying %zu header from skb %p\n", to_copy,
-				 skb);
+			if(dbg) printk("%s: copying %zu header from skb %p on cp:%p\n", __func__, to_copy,
+				 skb, cp);
 			skb_copy_bits(skb, offset,
 				      (char *)&tinc->ti_inc.i_hdr +
 						sizeof(struct rds_header) -
@@ -275,16 +276,17 @@ static int rds_tcp_read_sock(struct rds_conn_path *cp, gfp_t gfp)
 	desc.count = 1; /* give more than one skb per call */
 
 	tcp_read_sock(sock->sk, &desc, rds_tcp_data_recv);
-	rdsdebug("tcp_read_sock for tc %p gfp 0x%x returned %d\n", tc, gfp,
-		 desc.error);
+
+	if(test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
+		printk("%s: tcp_read_sock for cp:%p tc %p gfp 0x%x returned %d\n", __func__, cp, tc, gfp, desc.error);
 
 	if (skb_queue_empty_lockless(&sock->sk->sk_receive_queue)) {
 	    if( wq_has_sleeper(&tc->t_recv_done_waitq)) {
-		printk("%s waking sleepers for t_recv_done_waitq:%p\n", __func__, &tc->t_recv_done_waitq);
+		printk("%s: waking sleepers for t_recv_done_waitq:%p\n", __func__, &tc->t_recv_done_waitq);
 		wake_up(&tc->t_recv_done_waitq);
 	    }
 	    else if(test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
-		    printk("%s no sleepers for t_recv_done_waitq:%p\n", __func__, &tc->t_recv_done_waitq);
+		    printk("%s: no sleepers for t_recv_done_waitq:%p\n", __func__, &tc->t_recv_done_waitq);
 	
 	}
 

@@ -87,6 +87,15 @@ enum {
 	RDS_CONN_ERROR,
 };
 
+#define state_str(state) state==RDS_CONN_DOWN?"RDS_CONN_DOWN": \
+                              (state==RDS_CONN_CONNECTING?"RDS_CONN_CONNECTING": \
+                               (state==RDS_CONN_DISCONNECTING?"RDS_CONN_DISCONNECTING": \
+                                (state==RDS_CONN_UP?"RDS_CONN_UP": \
+                                 (state==RDS_CONN_RESETTING?"RDS_CONN_RESETTING": \
+                                  (state==RDS_CONN_ERROR?"RDS_CONN_ERROR":"NA"))))) \
+
+
+
 /* Bits for c_flags */
 #define RDS_LL_SEND_FULL	0
 #define RDS_RECONNECT_PENDING	1
@@ -879,8 +888,9 @@ struct scatterlist *rds_message_alloc_sgs(struct rds_message *rm, int nents);
 int rds_message_copy_from_user(struct rds_message *rm, struct iov_iter *from,
 			       bool zcopy);
 struct rds_message *rds_message_map_pages(unsigned long *page_addrs, unsigned int total_len);
-void rds_message_populate_header(struct rds_header *hdr, __be16 sport,
-				 __be16 dport, u64 seq);
+void rds_message_populate_header_wrap(struct rds_header *hdr, __be16 sport,
+				 __be16 dport, u64 seq, bool debug, const char *func, int line);
+#define rds_message_populate_header(hdr, sp, dp, seq) rds_message_populate_header_wrap(hdr, sp, dp, seq, false, __func__, __LINE__)
 int rds_message_add_extension(struct rds_header *hdr,
 			      unsigned int type, const void *data, unsigned int len);
 int rds_message_next_extension(struct rds_header *hdr,

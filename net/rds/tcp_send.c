@@ -93,7 +93,8 @@ int rds_tcp_xmit(struct rds_connection *conn, struct rds_message *rm,
 		if (test_bit(RDS_MSG_RETRANSMITTED, &rm->m_flags))
 			rm->m_inc.i_hdr.h_flags |= RDS_FLAG_RETRANSMITTED;
 
-		rdsdebug("rm %p tcp nxt %u ack_seq %llu\n",
+		if (test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags))
+			printk("%s cp:%p rm %p tcp nxt %u ack_seq %llu\n",__func__,cp,
 			 rm, rds_tcp_write_seq(tc),
 			 (unsigned long long)rm->m_ack_seq);
 	}
