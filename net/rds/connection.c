@@ -434,6 +434,9 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 			   !test_bit(RDS_RECV_REFILL, &cp->cp_flags));
 		printk("%s: Queue wait done for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 
+		//if (test_and_clear_bit(RDS_PSSV_SOCK_CLOSE, &cp->cp_flags))
+		//	return;
+
 		conn->c_trans->conn_path_shutdown(cp);
 		printk("%s: conn_path_shutdown done for cp:%p in state %s:%d\n",__func__, cp, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state));
 		rds_conn_path_reset(cp);
@@ -931,6 +934,7 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 
 	rcu_read_lock();
 	if (!destroy && rds_destroy_pending(cp->cp_conn)) {
+		printk("%s: No drop, destruct pending state:%s(%d) on cp:%p cp->cp_flags:%lX\n", __func__, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state), cp, cp->cp_flags);
 		rcu_read_unlock();
 		return;
 	}
@@ -938,6 +942,8 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 		printk("%s: Enter: state:%s(%d) on cp:%p cp->cp_flags:%lX\n", __func__, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state), cp, cp->cp_flags);
 		mod_delayed_work(cp->cp_wq, &cp->cp_up_or_down_w, 0);
 	}
+	else
+		printk("%s: Shutdown already queued: state:%s(%d) on cp:%p cp->cp_flags:%lX\n", __func__, state_str(atomic_read(&cp->cp_state)), atomic_read(&cp->cp_state), cp, cp->cp_flags);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_drop);

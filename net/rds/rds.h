@@ -103,6 +103,7 @@ enum {
 #define RDS_RECV_REFILL		3
 #define	RDS_DESTROY_PENDING	4
 #define RDS_SHUTDOWN_WORK_QUEUED 7
+#define RDS_PSSV_SOCK_CLOSE	 13
 
 /* Max number of multipaths per RDS connection. Must be a power of 2 */
 #define	RDS_MPATH_WORKERS	8

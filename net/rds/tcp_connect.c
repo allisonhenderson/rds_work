@@ -93,6 +93,25 @@ void rds_tcp_state_change(struct sock *sk)
 	case TCP_LAST_ACK:
 	case TCP_CLOSE:
 		printk("%s: case:%s for cp:%p\n", __func__, sk->sk_state==TCP_CLOSE_WAIT?"TCP_CLOSE_WAIT":(sk->sk_state==TCP_LAST_ACK?"TCP_LAST_ACK":(sk->sk_state==TCP_CLOSE?"TCP_CLOSE":"NA")),  cp);
+
+
+
+
+               /* If the sock closed unexpectedly, the active peer should
+                * start the closing ack sequence (RFC 793, pg 23) while
+                * the passive peer should simply move the conn to a
+                * disconnected state and wait for the TCP_ESTABLISHED state
+                * change.
+                */
+               rcu_read_lock();
+               if (rds_conn_path_up(cp) &&
+                   rds_addr_cmp(&cp->cp_conn->c_laddr,
+                                &cp->cp_conn->c_faddr) >= 0)
+                       set_bit(RDS_PSSV_SOCK_CLOSE, &cp->cp_flags);
+               rcu_read_unlock();
+
+
+
 		if (wq_has_sleeper(&tc->t_recv_done_waitq)) {
 			printk("%s: waking sleepers for  t_recv_done_waitq:%p for cp:%p\n", __func__, cp, &tc->t_recv_done_waitq);
 			wake_up(&tc->t_recv_done_waitq);
@@ -126,12 +145,16 @@ int rds_tcp_conn_path_connect(struct rds_conn_path *cp)
 	/* for multipath rds,we only trigger the connection after
 	 * the handshake probe has determined the number of paths.
 	 */
-	if (cp->cp_index > 0 && cp->cp_conn->c_npaths < 2)
+	if (cp->cp_index > 0 && cp->cp_conn->c_npaths < 2) {
+		printk("%s: only trigger connect after probe on cp:%p\n", __func__, cp);
 		return -EAGAIN;
+	}
 
+	printk("%s: Enter for cp:%p\n", __func__, cp);
 	mutex_lock(&tc->t_conn_path_lock);
 
 	if (rds_conn_path_up(cp)) {
+		printk("%s: Path already up for cp:%p\n", __func__, cp);
 		mutex_unlock(&tc->t_conn_path_lock);
 		return 0;
 	}
@@ -145,11 +168,14 @@ int rds_tcp_conn_path_connect(struct rds_conn_path *cp)
 		isv6 = true;
 	}
 
-	if (ret < 0)
+	if (ret < 0) {
+		printk("%s: sock create failed on cp:%p\n", __func__, cp);
 		goto out;
+	}
 
 	if (!rds_tcp_tune(sock)) {
 		ret = -EINVAL;
+		printk("%s: Tune failed on cp:%p\n", __func__, cp);
 		goto out;
 	}
 
@@ -231,6 +257,7 @@ out:
 	mutex_unlock(&tc->t_conn_path_lock);
 	if (sock)
 		sock_release(sock);
+	printk("%s: Exit ret:%d  cp:%p\n", __func__, ret, cp);
 	return ret;
 }
 
@@ -259,6 +286,7 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 		if (rds_destroy_pending(cp->cp_conn))
 			sock_no_linger(sock->sk);
 
+		if (!test_and_clear_bit(RDS_PSSV_SOCK_CLOSE, &cp->cp_flags)) {
 		sock->ops->shutdown(sock, SHUT_WR);
 
 		/* after sending FIN,
@@ -290,6 +318,7 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 					     skb_queue_empty_lockless(&sock->sk->sk_receive_queue),
 					     msecs_to_jiffies(100)) &&
 			 ++rounds < 50);
+		}
 		printk("%s: Wait done for t_recv_done_waitq:%p for cp:%p round:%d\n", __func__,  &tc->t_recv_done_waitq, cp, rounds);
 		lock_sock(sock->sk);
 
