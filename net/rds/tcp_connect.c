@@ -60,6 +60,7 @@ void rds_tcp_state_change(struct sock *sk)
 	case TCP_SYN_RECV:
 		break;
 	case TCP_ESTABLISHED:
+		printk("%s: case:TCP_ESTABLISHED for cp:%p\n", __func__, cp);
 		/* Force the peer to reconnect so that we have the
 		 * TCP ports going from <smaller-ip>.<transient> to
 		 * <larger-ip>.<RDS_TCP_PORT>. We avoid marking the
@@ -70,8 +71,10 @@ void rds_tcp_state_change(struct sock *sk)
 				 &cp->cp_conn->c_faddr) >= 0 &&
 		    rds_conn_path_transition(cp, RDS_CONN_CONNECTING,
 					     RDS_CONN_ERROR)) {
+			printk("%s: case:TCP_ESTABLISHED dropping cp:%p\n", __func__, cp);
 			rds_conn_path_drop(cp, false);
 		} else {
+			printk("%s: case:TCP_ESTABLISHED complete for cp:%p\n", __func__, cp);
 			rds_connect_path_complete(cp, RDS_CONN_CONNECTING);
 			wake_up(&cp->cp_up_waitq);
 		}
@@ -95,6 +98,7 @@ void rds_tcp_state_change(struct sock *sk)
 			wake_up(&tc->t_recv_done_waitq);
 		} else
 			printk("%s: no sleepers for  t_recv_done_waitq:%p for cp:%p\n", __func__, cp, &tc->t_recv_done_waitq);
+
 		rds_conn_path_drop(cp, false);
 		break;
 	default:
@@ -289,6 +293,7 @@ void rds_tcp_conn_path_shutdown(struct rds_conn_path *cp)
 		printk("%s: Wait done for t_recv_done_waitq:%p for cp:%p round:%d\n", __func__,  &tc->t_recv_done_waitq, cp, rounds);
 		lock_sock(sock->sk);
 
+		printk("%s: discard messages that the peer received already on cp:%p\n", __func__, cp);
 		/* discard messages that the peer received already */
 		tc->t_last_seen_una = rds_tcp_snd_una(tc);
 		rds_send_path_drop_acked(cp, rds_tcp_snd_una(tc), rds_tcp_is_acked);

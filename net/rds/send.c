@@ -737,9 +737,11 @@ void rds_send_path_drop_acked(struct rds_conn_path *cp, u64 ack,
 	spin_lock_irqsave(&cp->cp_lock, flags);
 
 	list_for_each_entry_safe(rm, tmp, &cp->cp_retrans, m_conn_item) {
+
 		if (!rds_send_is_acked(rm, ack, is_acked))
 			break;
 
+		if (test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags)) printk("%s: moving %p  h_sequence:%llu ack:%llu\n", __func__, &rm->m_conn_item, be64_to_cpu(rm->m_inc.i_hdr.h_sequence), ack);
 		list_move(&rm->m_conn_item, &list);
 		clear_bit(RDS_MSG_ON_CONN, &rm->m_flags);
 	}
@@ -1485,8 +1487,9 @@ rds_send_probe(struct rds_conn_path *cp, __be16 sport,
 	rm->m_inc.i_conn = cp->cp_conn;
 	rm->m_inc.i_conn_path = cp;
 
-	rds_message_populate_header_wrap(&rm->m_inc.i_hdr, sport, dport,
-				    cp->cp_next_tx_seq, test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags), __func__, __LINE__);
+	rds_message_populate_header(&rm->m_inc.i_hdr, sport, dport,cp->cp_next_tx_seq);
+	//rds_message_populate_header_wrap(&rm->m_inc.i_hdr, sport, dport,
+	//			    cp->cp_next_tx_seq, test_bit(RDS_SHUTDOWN_WORK_QUEUED, &cp->cp_flags), __func__, __LINE__);
 	rm->m_inc.i_hdr.h_flags |= h_flags;
 	cp->cp_next_tx_seq++;
 
