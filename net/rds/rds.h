@@ -173,9 +173,6 @@ struct rds_connection {
 	struct rds_conn_path	*c_path;
 	wait_queue_head_t	c_hs_waitq; /* handshake waitq */
 
-	u32			c_my_gen_num;
-	u32			c_peer_gen_num;
-
 	u64			c_cp0_mprds_catchup_tx_seq;
 };
 
@@ -283,7 +280,6 @@ struct rds_ext_header_rdma_bytes {
  * Implicit length = 2 bytes.
  */
 #define RDS_EXTHDR_NPATHS	5
-#define RDS_EXTHDR_GEN_NUM	6
 #define RDS_EXTHDR_SPORT_IDX    8
 
 #define __RDS_EXTHDR_MAX	16 /* for now */
@@ -795,7 +791,6 @@ void rds_cong_exit(void);
 struct rds_message *rds_cong_update_alloc(struct rds_connection *conn);
 
 /* connection.c */
-extern u32 rds_gen_num;
 int rds_conn_init(void);
 void rds_conn_exit(void);
 struct rds_connection *rds_conn_create(struct net *net,
