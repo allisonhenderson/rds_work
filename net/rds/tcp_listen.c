@@ -89,6 +89,7 @@ rds_tcp_accept_one_path(struct rds_connection *conn, struct socket *sock)
 		sport = -1;
 	}
 
+	printk("%s:%d Enter\n", __func__, __LINE__);
 	npaths = max_t(int, 1, conn->c_npaths);
 
 	if (sport >= 0) {
@@ -103,10 +104,13 @@ rds_tcp_accept_one_path(struct rds_connection *conn, struct socket *sock)
 		struct rds_conn_path *cp = &conn->c_path[i];
 
 		if (rds_conn_path_transition(cp, RDS_CONN_DOWN,
-					     RDS_CONN_CONNECTING))
+					     RDS_CONN_CONNECTING)) {
+			printk("%s:%d Exit: %p\n", __func__, __LINE__, cp->cp_transport_data);
 			return cp->cp_transport_data;
+		}
 	}
 
+	printk("%s:%d Exit: NULL\n", __func__, __LINE__);
 	return NULL;
 }
 

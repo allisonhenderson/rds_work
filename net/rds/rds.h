@@ -894,8 +894,9 @@ int rds_message_copy_from_user(struct rds_message *rm, struct iov_iter *from,
 struct rds_message *rds_message_map_pages(unsigned long *page_addrs, unsigned int total_len);
 void rds_message_populate_header(struct rds_header *hdr, __be16 sport,
 				 __be16 dport, u64 seq);
-int rds_message_add_extension(struct rds_header *hdr,
-			      unsigned int type, const void *data, unsigned int len);
+int rds_message_add_extension_wrap(struct rds_header *hdr,
+			      unsigned int type, const void *data, unsigned int len, const char* func, int line);
+#define rds_message_add_extension(hdr, type, data, line) rds_message_add_extension_wrap(hdr, type, data, line, __func__, __LINE__);
 int rds_message_next_extension(struct rds_header *hdr,
 			       unsigned int *pos, void *buf, unsigned int *buflen);
 int rds_message_add_rdma_dest_extension(struct rds_header *hdr, u32 r_key, u32 offset);

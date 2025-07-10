@@ -196,8 +196,8 @@ static void rds_recv_incoming_exthdrs(struct rds_incoming *inc, struct rds_sock 
 	}
 }
 
-static void rds_recv_hs_exthdrs(struct rds_header *hdr,
-				struct rds_connection *conn)
+static void rds_recv_hs_exthdrs_wrap(struct rds_header *hdr,
+				struct rds_connection *conn, const char* func, int line)
 {
 	unsigned int pos = 0, type, len;
 	union {
@@ -212,9 +212,11 @@ static void rds_recv_hs_exthdrs(struct rds_header *hdr,
 
 	new_npaths = conn->c_npaths;
 
+	pr_info("%s: h_exthdr=%*ph\n", __func__, RDS_HEADER_EXT_SPACE, hdr->h_exthdr);
 	while (1) {
 		len = sizeof(buffer);
 		type = rds_message_next_extension(hdr, &pos, &buffer, &len);
+		printk("%s:%d:%s:%d type: %d\n", func, line, __func__, __LINE__, type);
 		if (type == RDS_EXTHDR_NONE)
 			break;
 		/* Process extension header here */
@@ -228,6 +230,7 @@ static void rds_recv_hs_exthdrs(struct rds_header *hdr,
 			break;
 		case RDS_EXTHDR_SPORT_IDX:
 			new_with_sport_idx = true;
+			printk("%s:%d:%s:%d RDS_EXTHDR_SPORT_IDX\n",func,line, __func__, __LINE__);
 			break;
 		default:
 			pr_warn_ratelimited("ignoring unknown exthdr type "
@@ -259,6 +262,8 @@ static void rds_recv_hs_exthdrs(struct rds_header *hdr,
 	    conn->c_trans->conn_slots_available)
 		conn->c_trans->conn_slots_available(conn);
 }
+
+#define rds_recv_hs_exthdrs(hdr, conn) rds_recv_hs_exthdrs_wrap(hdr, conn, __func__, __LINE__)
 
 /* rds_start_mprds() will synchronously start multiple paths when appropriate.
  * The scheme is based on the following rules:
@@ -371,6 +376,7 @@ void rds_recv_incoming(struct rds_connection *conn, struct in6_addr *saddr,
 		rds_stats_inc(s_recv_ping);
 		rds_send_pong(cp, inc->i_hdr.h_sport);
 		/* if this is a handshake ping, start multipath if necessary */
+		//printk("%s:%d: is this is a handshake ping?\n", __func__, __LINE__);
 		if (RDS_HS_PROBE(be16_to_cpu(inc->i_hdr.h_sport),
 				 be16_to_cpu(inc->i_hdr.h_dport))) {
 			rds_recv_hs_exthdrs(&inc->i_hdr, cp->cp_conn);
@@ -379,6 +385,7 @@ void rds_recv_incoming(struct rds_connection *conn, struct in6_addr *saddr,
 		goto out;
 	}
 
+	//printk("%s:%d: is this is a flag port %d sport:%d?\n", __func__, __LINE__, be16_to_cpu(inc->i_hdr.h_dport), inc->i_hdr.h_sport);
 	if (be16_to_cpu(inc->i_hdr.h_dport) ==  RDS_FLAG_PROBE_PORT &&
 	    inc->i_hdr.h_sport == 0) {
 		rds_recv_hs_exthdrs(&inc->i_hdr, cp->cp_conn);

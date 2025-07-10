@@ -1529,6 +1529,7 @@ out:
 int
 rds_send_pong(struct rds_conn_path *cp, __be16 dport)
 {
+	printk("%s:%d send pong\n", __func__, __LINE__);
 	return rds_send_probe(cp, 0, dport, 0);
 }
 
@@ -1545,6 +1546,7 @@ rds_send_ping(struct rds_connection *conn, int cp_index)
 	}
 	conn->c_ping_triggered = 1;
 	spin_unlock_irqrestore(&cp->cp_lock, flags);
+	printk("%s:%d send ping\n", __func__, __LINE__);
 	rds_send_probe(cp, cpu_to_be16(RDS_FLAG_PROBE_PORT), 0, 0);
 }
 EXPORT_SYMBOL_GPL(rds_send_ping);

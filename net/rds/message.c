@@ -231,20 +231,28 @@ static int rds_find_next_ext_space(struct rds_header *hdr, unsigned int len,
 	return 1;
 }
 
-int rds_message_add_extension(struct rds_header *hdr, unsigned int type,
-			      const void *data, unsigned int len)
+int rds_message_add_extension_wrap(struct rds_header *hdr, unsigned int type,
+			      const void *data, unsigned int len, const char *func, int line)
 {
 	unsigned int ext_len = sizeof(u8) + len;
 	unsigned char *dst;
 
-	if (rds_find_next_ext_space(hdr, ext_len, &dst))
+	if (rds_find_next_ext_space(hdr, ext_len, &dst)) {
+		printk("%s:%d %s: no space for type=%d, len=%d\n",func, line, __func__, type, len);
 		return 0;
+	}
 
-	if (type >= __RDS_EXTHDR_MAX || len != rds_exthdr_size[type])
+	if (type >= __RDS_EXTHDR_MAX || len != rds_exthdr_size[type]) {
+		printk("%s:%d %s: invalid type=%d, len=%d\n", func, line, __func__, type, len);
 		return 0;
+	}
 
-	if (ext_len >= RDS_HEADER_EXT_SPACE)
+	if (ext_len >= RDS_HEADER_EXT_SPACE) {
+		pr_info("%s:%d %s: out-of-space ext_len=%d, type=%d, len=%d\n",func, line, __func__,ext_len, type, len);
 		return 0;
+	}
+
+	printk("%s:%d %s: adding type=%d, len=%d\n", func, line, __func__, type, len);
 
 	*dst++ = type;
 	memcpy(dst, data, len);
@@ -252,7 +260,8 @@ int rds_message_add_extension(struct rds_header *hdr, unsigned int type,
 	dst[len] = RDS_EXTHDR_NONE;
 	return 1;
 }
-EXPORT_SYMBOL_GPL(rds_message_add_extension);
+EXPORT_SYMBOL_GPL(rds_message_add_extension_wrap);
+
 
 /*
  * If a message has extension headers, retrieve them here.
