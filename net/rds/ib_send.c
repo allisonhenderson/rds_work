@@ -582,7 +582,7 @@ int rds_ib_xmit(struct rds_connection *conn, struct rds_message *rm,
 
 			ext_hdr.h_rdma_rkey = cpu_to_be32(rm->rdma.op_rkey);
 			rds_message_add_extension(&rm->m_inc.i_hdr,
-					RDS_EXTHDR_RDMA, &ext_hdr, sizeof(ext_hdr));
+						  RDS_EXTHDR_RDMA, &ext_hdr);
 
 			/* prepare the rdma bytes ext header */
 			rdma_bytes_ext_hdr.h_rflags = rm->rdma.op_write ?
@@ -592,9 +592,8 @@ int rds_ib_xmit(struct rds_connection *conn, struct rds_message *rm,
 
 			if (rds_message_add_extension(&rm->m_inc.i_hdr,
 						      RDS_EXTHDR_RDMA_BYTES,
-						      &rdma_bytes_ext_hdr,
-						      sizeof(rdma_bytes_ext_hdr))) {
-				/* rdma bytes ext header was added successfully,
+						      &rdma_bytes_ext_hdr)) {
+				/* rdma bytes ext header was added succesfully,
 				 * notify the remote side via flag in header
 				 */
 				rm->m_inc.i_hdr.h_flags |=
