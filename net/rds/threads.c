@@ -141,7 +141,7 @@ void rds_queue_reconnect(struct rds_conn_path *cp)
 		cp->cp_reconnect_jiffies = rds_sysctl_reconnect_min_jiffies;
 		rcu_read_lock();
 		if (!rds_destroy_pending(cp->cp_conn))
-			queue_delayed_work(cp->cp_wq, &cp->cp_conn_w, 0);
+			queue_delayed_work(cp->cp_wq, &cp->cp_up_or_down_w, 0);
 		rcu_read_unlock();
 		return;
 	}
@@ -152,7 +152,7 @@ void rds_queue_reconnect(struct rds_conn_path *cp)
 		 conn, &conn->c_laddr, &conn->c_faddr);
 	rcu_read_lock();
 	if (!rds_destroy_pending(cp->cp_conn))
-		queue_delayed_work(cp->cp_wq, &cp->cp_conn_w,
+		queue_delayed_work(cp->cp_wq, &cp->cp_up_or_down_w,
 				   rand % cp->cp_reconnect_jiffies);
 	rcu_read_unlock();
 
@@ -160,11 +160,9 @@ void rds_queue_reconnect(struct rds_conn_path *cp)
 					rds_sysctl_reconnect_max_jiffies);
 }
 
-void rds_connect_worker(struct work_struct *work)
+static void rds_connect_worker(struct rds_conn_path *cp,
+			       struct work_struct *work)
 {
-	struct rds_conn_path *cp = container_of(work,
-						struct rds_conn_path,
-						cp_conn_w.work);
 	struct rds_connection *conn = cp->cp_conn;
 	int ret;
 
@@ -241,13 +239,23 @@ void rds_recv_worker(struct work_struct *work)
 	}
 }
 
-void rds_shutdown_worker(struct work_struct *work)
+static void rds_shutdown_worker(struct rds_conn_path *cp,
+				struct work_struct *work)
+{
+	rds_conn_shutdown(cp);
+}
+
+void rds_up_or_down_worker(struct work_struct *work)
 {
 	struct rds_conn_path *cp = container_of(work,
 						struct rds_conn_path,
-						cp_down_w);
-
-	rds_conn_shutdown(cp);
+						cp_up_or_down_w.work);
+	if (test_bit(RDS_RECONNECT_PENDING, &cp->cp_flags)) {
+		rds_connect_worker(cp, work);
+	} else {
+		clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
+		rds_shutdown_worker(cp, work);
+	}
 }
 
 void rds_threads_exit(void)
