@@ -61,6 +61,8 @@ void rdsdebug(char *fmt, ...)
 #define RDS_CONG_MAP_PAGES	(PAGE_ALIGN(RDS_CONG_MAP_BYTES) / PAGE_SIZE)
 #define RDS_CONG_MAP_PAGE_BITS	(PAGE_SIZE * 8)
 
+#define RDS_CP_WQ_MAX_ACTIVE   4
+
 struct rds_cong_map {
 	struct rb_node		m_rb_node;
 	struct in6_addr		m_addr;
@@ -126,8 +128,7 @@ struct rds_conn_path {
 	unsigned long		cp_reconnect_jiffies;
 	struct delayed_work	cp_send_w;
 	struct delayed_work	cp_recv_w;
-	struct delayed_work	cp_conn_w;
-	struct work_struct	cp_down_w;
+	struct delayed_work	cp_up_or_down_w;
 	struct mutex		cp_cm_lock;	/* protect cp_state & cm */
 	wait_queue_head_t	cp_waitq;
 
@@ -1027,8 +1028,7 @@ int rds_threads_init(void);
 void rds_threads_exit(void);
 extern struct workqueue_struct *rds_wq;
 void rds_queue_reconnect(struct rds_conn_path *cp);
-void rds_connect_worker(struct work_struct *);
-void rds_shutdown_worker(struct work_struct *);
+void rds_up_or_down_worker(struct work_struct *work);
 void rds_send_worker(struct work_struct *);
 void rds_recv_worker(struct work_struct *);
 void rds_connect_path_complete(struct rds_conn_path *conn, int curr);
