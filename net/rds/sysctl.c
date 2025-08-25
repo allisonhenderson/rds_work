@@ -49,6 +49,10 @@ unsigned int  rds_sysctl_max_unacked_bytes = (16 << 20);
 
 unsigned int rds_sysctl_ping_enable = 1;
 
+unsigned int rds_sysctl_cfu_cache_cap = 512;
+
+unsigned int rds_cfu_cache_gc_interval = 1;
+
 static struct ctl_table rds_sysctl_rds_table[] = {
 	{
 		.procname       = "reconnect_min_delay_ms",
@@ -88,6 +92,20 @@ static struct ctl_table rds_sysctl_rds_table[] = {
 		.maxlen         = sizeof(int),
 		.mode           = 0644,
 		.proc_handler   = proc_dointvec,
+	},
+	{
+		.procname       = "copy_from_user_per_cpu_cache_cap",
+		.data           = &rds_sysctl_cfu_cache_cap,
+		.maxlen         = sizeof(rds_sysctl_cfu_cache_cap),
+		.mode           = 0644,
+		.proc_handler   = proc_douintvec,
+	},
+	{
+		.procname       = "copy_from_user_gc_interval_secs",
+		.data           = &rds_cfu_cache_gc_interval,
+		.maxlen         = sizeof(rds_cfu_cache_gc_interval),
+		.mode           = 0644,
+		.proc_handler   = proc_douintvec,
 	},
 };
 
