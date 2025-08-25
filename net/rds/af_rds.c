@@ -888,6 +888,7 @@ static void rds_exit(void)
 	rds_info_deregister_func(RDS6_INFO_SOCKETS, rds6_sock_info);
 	rds_info_deregister_func(RDS6_INFO_RECV_MESSAGES, rds6_sock_inc_info);
 #endif
+	rds_cfu_fini_cache();
 }
 module_exit(rds_exit);
 
@@ -929,6 +930,7 @@ static int __init rds_init(void)
 	rds_info_register_func(RDS6_INFO_SOCKETS, rds6_sock_info);
 	rds_info_register_func(RDS6_INFO_RECV_MESSAGES, rds6_sock_inc_info);
 #endif
+	rds_cfu_init_cache();
 
 	goto out;
 

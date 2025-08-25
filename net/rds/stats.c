@@ -72,6 +72,8 @@ static const char *const rds_stat_names[] = {
 	"page_remainder_miss",
 	"copy_to_user",
 	"copy_from_user",
+	"copy_from_user_cache_get",
+	"copy_from_user_cache_put",
 	"cong_update_queued",
 	"cong_update_received",
 	"cong_send_error",
