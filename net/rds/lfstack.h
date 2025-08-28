@@ -5,14 +5,21 @@
 #include <linux/slab.h>
 
 #ifdef CONFIG_HAVE_CMPXCHG_DOUBLE
+#include <linux/types.h>      /* u128 */
+#include <asm/cmpxchg.h>      /* try_cmpxchg128 */
 #define LFSTACK_LOCKFREE
 #else
 #include <linux/llist.h>
 #endif
 #ifdef LFSTACK_LOCKFREE
 struct lfstack {
-	__aligned_largest struct lfstack_el *first;
+	struct lfstack_el *first;
 	uintptr_t seq;
+}__aligned(16); /* 128-bit CAS requires 16B alignment of the pair */
+
+union lfstack_header {
+	struct lfstack lfs;
+	u128 val;
 };
 #else
 #include <linux/llist.h>
@@ -44,15 +51,15 @@ static inline void lfstack_free(struct lfstack *stack)
 static inline void lfstack_push(struct lfstack *stack, struct lfstack_el *el)
 {
 #ifdef LFSTACK_LOCKFREE
-	struct lfstack_el *first;
-	uintptr_t seq, nseq;
+	union lfstack_header prev, new;
 
 	while (true) {
-		first = stack->first;
-		seq = stack->seq;
-		el->next = first;
-		nseq = seq + 1;
-		if (cmpxchg_double(&stack->first, &stack->seq, first, seq, el, nseq))
+		prev.lfs.first = stack->first;
+		prev.lfs.seq = stack->seq;
+		new.lfs.first = el;
+		new.lfs.seq  = prev.lfs.seq + 1;
+		el->next = prev.lfs.first;
+		if (try_cmpxchg128((volatile u128 *)&stack->first, &prev.val, new.val))
 			break;
 	}
 #else
@@ -63,15 +70,15 @@ static inline void lfstack_push(struct lfstack *stack, struct lfstack_el *el)
 static inline void lfstack_push_many(struct lfstack *stack, struct lfstack_el *el_first, struct lfstack_el *el_last)
 {
 #ifdef LFSTACK_LOCKFREE
-	struct lfstack_el *first;
-	uintptr_t seq, nseq;
+	union lfstack_header prev, new;
 
 	while (true) {
-		first = stack->first;
-		seq = stack->seq;
-		el_last->next = first;
-		nseq = seq + 1;
-		if (cmpxchg_double(&stack->first, &stack->seq, first, seq, el_first, nseq))
+		prev.lfs.first = stack->first;
+		prev.lfs.seq = stack->seq;
+		new.lfs.first = el_first;
+		new.lfs.seq =  prev.lfs.seq + 1;
+		el_last->next  = prev.lfs.first;
+		if (try_cmpxchg128((volatile u128 *)&stack->first, &prev.val, new.val))
 			break;
 	}
 #else
@@ -82,21 +89,20 @@ static inline void lfstack_push_many(struct lfstack *stack, struct lfstack_el *e
 static inline struct lfstack_el *lfstack_pop(struct lfstack *stack)
 {
 #ifdef LFSTACK_LOCKFREE
-	struct lfstack_el *first, *next;
-	uintptr_t seq, nseq;
+	union lfstack_header prev, new;
 
 	while (true) {
-		first = stack->first;
-		if (!first)
+		prev.lfs.first = stack->first;
+		if (!prev.lfs.first)
 			goto out;
-		seq = stack->seq;
-		next = first->next;
-		nseq = seq + 1;
-		if (cmpxchg_double(&stack->first, &stack->seq, first, seq, next, nseq))
+		prev.lfs.seq = stack->seq;
+		new.lfs.first = prev.lfs.first->next;
+	        new.lfs.seq = prev.lfs.seq + 1;
+		if (try_cmpxchg128((volatile u128 *)&stack->first, &prev.val, new.val))
 			goto out;
 	}
 out:
-	return first;
+	return prev.lfs.first;
 #else
 	struct lfstack_el *el;
 	unsigned long flags;
