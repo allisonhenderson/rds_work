@@ -10,6 +10,7 @@ TEST_FILES := \
 	test.py \
 	rds_basic.py \
 	settings \
+	rds_stress.py \
 # end of TEST_FILES
 
 EXTRA_CLEAN := \
