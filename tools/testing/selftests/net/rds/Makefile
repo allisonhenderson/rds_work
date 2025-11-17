@@ -9,8 +9,8 @@ TEST_FILES := \
 	config \
 	include.sh \
 	rds_basic.py \
+	rds_stress.py \
 	settings \
-	test.py \
 # end of TEST_FILES
 
 EXTRA_CLEAN := \

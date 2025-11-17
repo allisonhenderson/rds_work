@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import shutil
+import rds_basic
+import rds_stress
 
 # Allow utils module to be imported from different directory
 this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -29,12 +31,30 @@ def signal_handler(_sig, _frame):
     print('Test timed out')
     sys.exit(1)
 
+def increment_ports(addrs, inc):
+    """Increment port numbers in the addrs list by inc.
+       Use between tests to make the port numbers unique
+
+    addrs: list of (ip, port) tuples
+    inc: int
+    """
+    new_addrs = []
+
+    for addr, port in addrs:
+        new_addrs.append((addr, port + inc))
+
+    return new_addrs
+
 #Parse out command line arguments.  We take an optional
 # timeout parameter and an optional log output folder
 parser = argparse.ArgumentParser(description="init script args",
                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-d", "--logdir", action="store",
                     help="directory to store logs", default="/tmp")
+parser.add_argument("-b", "--rds_basic", action="store_true",
+                    help="Run rds basic tests")
+parser.add_argument("-s", "--rds_stress", action="store_true",
+                    help="Run rds stress tests")
 parser.add_argument('--timeout', help="timeout to terminate hung test",
                     type=int, default=0)
 parser.add_argument('-l', '--loss', help="Simulate tcp packet loss",
@@ -106,7 +126,13 @@ env = {
     'netns': [NET0, NET1],
 }
 
-ret = rds_basic.run_test(env)
+ret = 0
+if args.rds_basic:
+    ret = rds_basic.run_test(env)
+
+if ret == 0 and args.rds_stress:
+    env['addrs'] = increment_ports(env['addrs'], 1000)
+    ret = rds_stress.run_test(env)
 
 print("Stopping network packet captures")
 for p, pcap_tmp, pcap, fd in tcpdump_procs:
