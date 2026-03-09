@@ -8,6 +8,7 @@ TEST_PROGS := run.sh
 TEST_FILES := \
 	config \
 	include.sh \
+	rds_basic.py \
 	settings \
 	test.py \
 # end of TEST_FILES
