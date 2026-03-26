@@ -9,14 +9,13 @@ import sys
 import tempfile
 import shutil
 import rds_basic
+import rds_rdma
 import rds_stress
 
 # Allow utils module to be imported from different directory
 this_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(this_dir, "../"))
 from lib.py.utils import ip
-
-import rds_basic
 
 NET0 = 'net0'
 NET1 = 'net1'
@@ -55,6 +54,8 @@ parser.add_argument("-b", "--rds_basic", action="store_true",
                     help="Run rds basic tests")
 parser.add_argument("-s", "--rds_stress", action="store_true",
                     help="Run rds stress tests")
+parser.add_argument("-r", "--rds_rdma", action="store_true",
+                    help="Run rds RDMA tests (requires CONFIG_RDS_RDMA and rdma_rxe)")
 parser.add_argument('--timeout', help="timeout to terminate hung test",
                     type=int, default=0)
 parser.add_argument('-l', '--loss', help="Simulate tcp packet loss",
@@ -133,6 +134,9 @@ if args.rds_basic:
 if ret == 0 and args.rds_stress:
     env['addrs'] = increment_ports(env['addrs'], 1000)
     ret = rds_stress.run_test(env)
+
+if ret == 0 and args.rds_rdma:
+    ret = rds_rdma.run_test(env)
 
 print("Stopping network packet captures")
 for p, pcap_tmp, pcap, fd in tcpdump_procs:

@@ -117,6 +117,31 @@ check_conf() {
 	check_conf_disabled CONFIG_MODULES
 }
 
+# Check kernel config and host environment for RDS-RDMA support.
+# Sets RDS_RDMA=0 and prints a message if the test cannot run, but does
+# not exit – the rest of the test suite continues without the RDMA test.
+check_rdma_conf()
+{
+	if [ "$RDS_RDMA" -eq 0 ]; then
+		return
+	fi
+	if ! grep -x "CONFIG_RDS_RDMA=y" "$kconfig" > /dev/null 2>&1; then
+		echo "selftests: [SKIP] rds_rdma test requires CONFIG_RDS_RDMA enabled"
+		echo "To enable, run tools/testing/selftests/net/rds/config.sh -r and rebuild"
+		RDS_RDMA=0
+		return
+	fi
+	if ! which rdma > /dev/null 2>&1; then
+		echo "selftests: [SKIP] rds_rdma test requires the 'rdma' tool (iproute2)"
+		RDS_RDMA=0
+		return
+	fi
+	if ! modinfo rdma_rxe > /dev/null 2>&1; then
+		echo "selftests: [SKIP] rds_rdma test requires the rdma_rxe (SoftRoCE) module"
+		RDS_RDMA=0
+	fi
+}
+
 check_env()
 {
 	if ! test -d "$obj_dir"; then
@@ -157,6 +182,7 @@ PDUP=0
 GENERATE_GCOV_REPORT=1
 RDS_BASIC=0
 RDS_STRESS=0
+RDS_RDMA=0
 FLAGS=""
 
 check_flags()
@@ -165,7 +191,11 @@ check_flags()
 		echo "selftests: Could not run rds-stress.  Disabling rds-stress."
 		RDS_STRESS=0
 	fi
-	if [ "$RDS_STRESS" -eq 0 ] && [ "$RDS_BASIC" -eq 0 ]; then
+	if [ "$RDS_RDMA" -ne 0 ] && ! which rds-stress > /dev/null 2>&1; then
+		echo "selftests: Could not run rds-stress.  Disabling rds-rdma."
+		RDS_RDMA=0
+	fi
+	if [ "$RDS_STRESS" -eq 0 ] && [ "$RDS_BASIC" -eq 0 ] && [ "$RDS_RDMA" -eq 0 ]; then
 		echo "selftests: Default to rds basic tests"
 		RDS_BASIC=1
 	fi
@@ -180,9 +210,13 @@ set_flags()
 	if [ "$RDS_BASIC" -ne 0 ]; then
 		FLAGS="$FLAGS -b"
 	fi
+
+	if [ "$RDS_RDMA" -ne 0 ]; then
+		FLAGS="$FLAGS -r"
+	fi
 }
 
-while getopts "d:l:c:u:bs" opt; do
+while getopts "d:l:c:u:bsr" opt; do
   case ${opt} in
     d)
       LOG_DIR=${OPTARG}
@@ -202,9 +236,12 @@ while getopts "d:l:c:u:bs" opt; do
     s)
       RDS_STRESS=1
       ;;
+    r)
+      RDS_RDMA=1
+      ;;
     :)
       echo "USAGE: run.sh [-d logdir] [-l packet_loss] [-c packet_corruption]" \
-           "[-u packet_duplcate] [-g] [-b] [-s]"
+           "[-u packet_duplcate] [-b] [-s] [-r]"
       exit 1
       ;;
     ?)
@@ -218,6 +255,7 @@ done
 check_env
 check_conf
 check_gcov_conf
+check_rdma_conf
 check_flags
 set_flags
 
