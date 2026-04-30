@@ -4,6 +4,7 @@
  *
  * Layout:
  *   /sys/kernel/debug/rds/<netns_inum>/<key>/info   (RO)
+ *                                            paths  (RO, transport callback)
  *                                            reset  (WO, drops the conn)
  *
  * <key> is "<laddr>-<faddr>-<trans>-<tos>[-<dev_if>]" so that conns sharing
@@ -45,6 +46,18 @@ static int rds_debugfs_info_show(struct seq_file *seq, void *unused)
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(rds_debugfs_info);
+
+static int rds_debugfs_paths_show(struct seq_file *seq, void *unused)
+{
+	struct rds_connection *conn = seq->private;
+
+	if (conn->c_trans->show_paths)
+		conn->c_trans->show_paths(seq, conn);
+	else
+		seq_puts(seq, "(transport does not implement show_paths)\n");
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(rds_debugfs_paths);
 
 static ssize_t rds_debugfs_reset_write(struct file *file,
 				       const char __user *buf,
@@ -114,6 +127,8 @@ void rds_debugfs_add_conn(struct rds_connection *conn)
 
 	debugfs_create_file("info",  0400, conn->c_debugfs, conn,
 			    &rds_debugfs_info_fops);
+	debugfs_create_file("paths", 0400, conn->c_debugfs, conn,
+			    &rds_debugfs_paths_fops);
 	debugfs_create_file("reset", 0200, conn->c_debugfs, conn,
 			    &rds_debugfs_reset_fops);
 }

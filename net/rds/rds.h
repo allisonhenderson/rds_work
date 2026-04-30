@@ -14,6 +14,8 @@
 
 #include "info.h"
 
+struct seq_file;
+
 /*
  * RDS Network protocol version
  */
@@ -624,6 +626,9 @@ struct rds_transport {
 	void (*flush_mrs)(void);
 	bool (*t_unloading)(struct rds_connection *conn);
 	u8 (*get_tos_map)(u8 tos);
+#ifdef CONFIG_DEBUG_FS
+	void (*show_paths)(struct seq_file *seq, struct rds_connection *conn);
+#endif
 };
 
 /* Bind hash table key length.  It is the sum of the size of a struct
