@@ -34,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/in.h>
 #include <linux/module.h>
+#include <linux/seq_file.h>
 #include <net/tcp.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
@@ -489,6 +490,101 @@ static u8 rds_tcp_get_tos_map(u8 tos)
 	return 0;
 }
 
+#ifdef CONFIG_DEBUG_FS
+static void rds_tcp_show_paths(struct seq_file *seq,
+			       struct rds_connection *conn)
+{
+	int i, npaths = conn->c_trans->t_mp_capable ? RDS_MPATH_WORKERS : 1;
+
+	seq_printf(seq, "%-3s %-46s %-5s %-2s %s\n",
+		   "idx", "peer", "port", "%", "check");
+
+	for (i = 0; i < npaths; i++) {
+		struct rds_conn_path *cp = &conn->c_path[i];
+		struct rds_tcp_connection *tc = cp->cp_transport_data;
+		union {
+			struct sockaddr		addr;
+			struct sockaddr_in	sin;
+			struct sockaddr_in6	sin6;
+		} peer;
+		struct sock *sk;
+		unsigned long flags;
+		__be16 lport, rport;
+		u16 sport;
+
+		if (!tc) {
+			seq_printf(seq, "%-3d (no tc)\n", i);
+			continue;
+		}
+
+		/* Pin the socket before dereferencing it: the shutdown path
+		 * (rds_tcp_conn_path_shutdown) clears tc->t_sock and then
+		 * sock_release()s it, so an unlocked read here would race a
+		 * concurrent teardown (e.g. one this very reset triggered).
+		 *
+		 * A tc is on rds_tcp_tc_list only while it owns a live socket:
+		 * rds_tcp_set_callbacks() adds it with t_sock set, and
+		 * rds_tcp_restore_callbacks() removes it under this lock before
+		 * the socket is released.  So while we hold the lock and the tc
+		 * is on the list, tc->t_sock is valid and we can take a
+		 * reference that keeps sk alive after we drop the lock.
+		 */
+		sk = NULL;
+		spin_lock_irqsave(&rds_tcp_tc_list_lock, flags);
+		if (!list_empty(&tc->t_list_item) && tc->t_sock &&
+		    tc->t_sock->sk) {
+			sk = tc->t_sock->sk;
+			sock_hold(sk);
+		}
+		spin_unlock_irqrestore(&rds_tcp_tc_list_lock, flags);
+
+		if (!sk) {
+			seq_printf(seq, "%-3d (no socket)\n", i);
+			continue;
+		}
+
+		lport = READ_ONCE(inet_sk(sk)->inet_sport);
+		rport = READ_ONCE(inet_sk(sk)->inet_dport);
+
+		/* The local socket is always bound to RDS_TCP_PORT for
+		 * incoming connections; for outgoing ones the peer is at
+		 * RDS_TCP_PORT.  The "peer" we print is whichever side is
+		 * not RDS_TCP_PORT.
+		 */
+		if (sk->sk_family == AF_INET6) {
+			peer.sin6.sin6_family = AF_INET6;
+			if (ntohs(lport) == RDS_TCP_PORT) {
+				peer.sin6.sin6_port = rport;
+				peer.sin6.sin6_addr = sk->sk_v6_daddr;
+				sport = ntohs(rport);
+			} else {
+				peer.sin6.sin6_port = lport;
+				peer.sin6.sin6_addr = inet6_sk(sk)->saddr;
+				sport = ntohs(lport);
+			}
+		} else { /* AF_INET */
+			peer.sin.sin_family = AF_INET;
+			if (ntohs(lport) == RDS_TCP_PORT) {
+				peer.sin.sin_port	  = rport;
+				peer.sin.sin_addr.s_addr  = inet_sk(sk)->inet_daddr;
+				sport = ntohs(rport);
+			} else {
+				peer.sin.sin_port	  = lport;
+				peer.sin.sin_addr.s_addr  = inet_sk(sk)->inet_saddr;
+				sport = ntohs(lport);
+			}
+		}
+
+		seq_printf(seq, "%-3d %46pISc %-5u %-2u %s\n",
+			   cp->cp_index, &peer.addr, sport,
+			   sport % RDS_MPATH_WORKERS,
+			   sport % RDS_MPATH_WORKERS == cp->cp_index ?
+				"ok" : "bad");
+		sock_put(sk);
+	}
+}
+#endif
+
 struct rds_transport rds_tcp_transport = {
 	.laddr_check		= rds_tcp_laddr_check,
 	.xmit_path_prepare	= rds_tcp_xmit_path_prepare,
@@ -511,6 +607,9 @@ struct rds_transport rds_tcp_transport = {
 	.t_prefer_loopback	= 1,
 	.t_mp_capable		= 1,
 	.t_unloading		= rds_tcp_is_unloading,
+#ifdef CONFIG_DEBUG_FS
+	.show_paths		= rds_tcp_show_paths,
+#endif
 };
 
 int rds_tcp_netid;
