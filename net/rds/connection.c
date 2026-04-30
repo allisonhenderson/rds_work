@@ -173,6 +173,7 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 	unsigned long flags;
 	int ret, i;
 	int npaths = (trans->t_mp_capable ? RDS_MPATH_WORKERS : 1);
+	bool created = false;
 
 	rcu_read_lock();
 	conn = rds_conn_lookup(net, head, laddr, faddr, trans, tos, dev_if);
@@ -313,6 +314,7 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 			parent->c_passive = conn;
 			rds_cong_add_conn(conn);
 			rds_conn_count++;
+			created = true;
 		}
 	} else {
 		/* Creating normal conn */
@@ -342,10 +344,14 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 			hlist_add_head_rcu(&conn->c_hash_node, head);
 			rds_cong_add_conn(conn);
 			rds_conn_count++;
+			created = true;
 		}
 	}
 	spin_unlock_irqrestore(&rds_conn_lock, flags);
 	rcu_read_unlock();
+
+	if (created)
+		rds_debugfs_add_conn(conn);
 
 out:
 	if (free_cp) {
@@ -543,6 +549,16 @@ void rds_conn_destroy(struct rds_connection *conn)
 	spin_lock_irq(&rds_conn_lock);
 	hlist_del_init_rcu(&conn->c_hash_node);
 	spin_unlock_irq(&rds_conn_lock);
+
+	/* Remove the debugfs entries before the conn is freed below.  This
+	 * ordering is load-bearing: the per-conn files store @conn in
+	 * i_private, and debugfs_remove_recursive() blocks until any in-flight
+	 * file operation (read *or* write, incl. the reset handler that calls
+	 * rds_conn_path_drop()) has completed, and prevents new ones from
+	 * starting.  Freeing @conn before this point would be a use-after-free;
+	 * do not reorder rds_debugfs_remove_conn() after the free.
+	 */
+	rds_debugfs_remove_conn(conn);
 	synchronize_rcu();
 
 	/* shut the connection down */

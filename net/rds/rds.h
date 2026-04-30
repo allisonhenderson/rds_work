@@ -172,7 +172,24 @@ struct rds_connection {
 	u32			c_peer_gen_num;
 
 	u64			c_cp0_mprds_catchup_tx_seq;
+
+#ifdef CONFIG_DEBUG_FS
+	struct dentry		*c_debugfs;	/* debugfs dir for this conn */
+#endif
 };
+
+static inline const char *rds_conn_path_state_str(struct rds_conn_path *cp)
+{
+	switch (atomic_read(&cp->cp_state)) {
+	case RDS_CONN_DOWN:		return "DOWN";
+	case RDS_CONN_CONNECTING:	return "CONNECTING";
+	case RDS_CONN_DISCONNECTING:	return "DISCONNECTING";
+	case RDS_CONN_UP:		return "UP";
+	case RDS_CONN_RESETTING:	return "RESETTING";
+	case RDS_CONN_ERROR:		return "ERROR";
+	default:			return "UNKNOWN";
+	}
+}
 
 static inline
 struct net *rds_conn_net(struct rds_connection *conn)
@@ -819,6 +836,18 @@ void rds_for_each_conn_info(struct socket *sock, unsigned int len,
 			  int (*visitor)(struct rds_connection *, void *),
 			  u64 *buffer,
 			  size_t item_len);
+
+#ifdef CONFIG_DEBUG_FS
+int  rds_debugfs_init(void);
+void rds_debugfs_exit(void);
+void rds_debugfs_add_conn(struct rds_connection *conn);
+void rds_debugfs_remove_conn(struct rds_connection *conn);
+#else
+static inline int  rds_debugfs_init(void) { return 0; }
+static inline void rds_debugfs_exit(void) {}
+static inline void rds_debugfs_add_conn(struct rds_connection *conn) {}
+static inline void rds_debugfs_remove_conn(struct rds_connection *conn) {}
+#endif
 
 __printf(2, 3)
 void __rds_conn_path_error(struct rds_conn_path *cp, const char *, ...);
