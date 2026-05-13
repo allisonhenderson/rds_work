@@ -197,7 +197,7 @@ def run_test(env):
     for s in sockets:
         ep.register(s, select.EPOLLRDNORM)
 
-    num_packets = 50000
+    num_packets = env.get('num_packets', DEFAULT_NUM_PKTS)
     nr_send = 0
     nr_recv = 0
 

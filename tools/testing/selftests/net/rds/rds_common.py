@@ -17,6 +17,9 @@ SO_RDS_TRANSPORT = 8
 RDS_TRANS_TCP    = 2
 RDS_TRANS_IB     = 0
 
+# Default number of packets to send if none were specified
+DEFAULT_NUM_PKTS = 50000
+
 def get_netns_inum_by_name(name) -> int:
     """Return the netns inode number (== RDS debugfs per-netns dir name)
     for a named netns.  'ip netns add <name>' bind-mounts the netns's nsfs
@@ -136,5 +139,15 @@ all_tests = {
         "packet_corrupt": 0,
         "packet_duplicate": 0,
         "peer2_reset_interval": 1,
+    },
+    "1.3": {
+        "file": "001-basic.py",
+        "tags": {"basic"},
+        "transports": {"tcp"},
+        "timeout": TEST_TIMEOUT,
+        "packet_loss": 15,
+        "packet_corrupt": 10,
+        "packet_duplicate": 5,
+        "num_packets": 10000,
     },
 }
