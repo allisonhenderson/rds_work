@@ -16,7 +16,7 @@ configured to omit the coverage report as well.
 USAGE:
 	rds_run.sh [-d logdir] [-l packet_loss] [-c packet_corruption]
 	           [-u packet_duplicate] [-t timeout]
-	           [-T tcp|rdma|tcp,rdma]
+	           [-T tcp|rdma|tcp,rdma] [-s selector]
 
 OPTIONS:
 	-d	Log directory.  If set, logs will be stored in the
@@ -34,6 +34,14 @@ OPTIONS:
 	-T	Comma-separated list of transports to test.  Accepts
 		"tcp", "rdma", or "tcp,rdma".  Defaults to "tcp".  Use
 		config.sh -r to enable required RDMA configs
+
+	-s	Test selector.  A comma-separated list of tokens choosing
+		which registered tests to run.  Each token may be a test
+		id ("1"), an exact sub-test key ("1.1"), a sub-test range
+		("1.*"), an inclusive range ("1-3"), or a tag ("basic").
+		"all" runs every registered test.  Defaults to the first
+		test.  Tests are skipped if their required transport is
+		not selected with -T.
 
 ENV VARIABLES:
 	RDS_LOG_DIR	Log directory.  If set, logs will be stored in

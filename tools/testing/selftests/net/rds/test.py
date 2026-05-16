@@ -8,11 +8,11 @@ import argparse
 import atexit
 import os
 import re
+import importlib.util
 import signal
 import subprocess
 import sys
 import time
-import importlib
 from rds_common import *
 
 # Allow utils module to be imported from different directory
@@ -56,6 +56,7 @@ signal_handler_label = ""
 tap_idx = 0
 nr_pass = 0
 nr_fail = 0
+nr_skip = 0
 
 def stop_pcaps():
     """Stop tcpdump processes.
@@ -132,11 +133,10 @@ def setup_tcp():
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             tcpdump_procs.append(p)
 
-    # simulate packet loss, duplication and corruption
+    # Install a netem qdisc with zero fault injection so set_test_params()
+    # can use 'tc qdisc change' to update it per-test.
     for netn, iface in [(NET0, VETH0), (NET1, VETH1)]:
-        ip(f"netns exec {netn} /usr/sbin/tc qdisc add dev {iface} root netem  \
-             corrupt {PACKET_CORRUPTION} loss {PACKET_LOSS} duplicate  \
-             {PACKET_DUPLICATE}")
+        ip(f"netns exec {netn} /usr/sbin/tc qdisc add dev {iface} root netem")
 
 def teardown_tcp():
     """
@@ -222,11 +222,109 @@ def setup_rdma():
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             tcpdump_procs.append(p)
 
-    # simulate packet loss, duplication and corruption
+    # Install a netem qdisc with zero fault injection so set_test_params()
+    # can use 'tc qdisc change' to update it per-test.
     for iface in [VETH_RDMA0, VETH_RDMA1]:
-        cmd(f"/usr/sbin/tc qdisc add dev {iface} root netem  \
-             corrupt {PACKET_CORRUPTION} loss {PACKET_LOSS} duplicate  \
-             {PACKET_DUPLICATE}")
+        cmd(f"/usr/sbin/tc qdisc add dev {iface} root netem")
+
+def increment_ports(addrs, inc):
+    """Increment port numbers in the addrs list by inc.
+       Use between tests to make the port numbers unique.
+
+    addrs: list of (ip, port) tuples
+    inc: int
+    """
+    return [(addr, port + inc) for addr, port in addrs]
+
+def parse_selector(selector):
+    """Parse a -s argument into the set of test keys to run.
+
+    Selector contains a comma-separated list of the following:
+      - a major number:     "1"   (matches "1.0")
+      - an exact key:       "1.1"
+      - a major range:      "1.*" (matches "1.0", "1.1")
+      - an inclusive range: "1-3" (matches "1.0","1.1" ... "3.0","3.1")
+      - a tag name:         "basic"
+    An empty or "all" selector runs every registered test.
+    """
+    all_keys = list(all_tests.keys())
+    if not selector or selector == "all":
+        return set(all_keys)
+
+    # a set of tags and the tests they correspond to
+    test_tags = {}
+    for key, test in all_tests.items():
+        for tag in test.get("tags", set()):
+            test_tags.setdefault(tag, set()).add(key)
+
+    # keys for the tests we are going to run
+    keys = set()
+    for token in selector.split(','):
+        token = token.strip()
+        if not token:
+            continue
+
+        # check if token is a digit and convert
+        # to float to match the decimal scheme
+        if (token.isdigit()):
+            token = token+".0"
+
+        # If the token is an exact match,
+        # add it to our key collection
+        if token in all_tests.keys():
+            keys.add(token)
+
+        # select sub-tests range (e.g. "1.*" -> "1.0", "1.1")
+        elif (token.endswith(".*") and token[0:-2].isdigit()):
+            major_num = token[0:-2]
+            test_range = [k for k in all_keys if k.startswith(major_num + '.')]
+            keys.update(test_range)
+
+        # inclusive range of major numbers
+        # (eg "1-3" -> "1.0", "1.1", "2.0", "2.1")
+        elif re.fullmatch(r'\d+-\d+', token):
+            lo, hi = (int(x) for x in token.split('-'))
+            for maj in range(lo, hi + 1):
+                test_range = [k for k in all_keys if k.startswith(str(maj) + '.')]
+                keys.update(keys.update)
+
+        # check for tag matches
+        elif token in test_tags:
+            keys.update(test_tags[token])
+
+        else:
+            raise SystemExit(f"test.py: unknown test selector: {token!r}")
+
+    return keys
+
+def set_test_params(key, args, transport):
+    """Apply per-test netem parameters from the registry.
+
+    Command-line values (non-None) take priority; otherwise the
+    registry entry for key is used.  Uses 'tc qdisc change' so the
+    existing netem qdisc installed by setup_tcp/setup_rdma is updated
+    in-place rather than re-created.
+    """
+    test = all_tests.get(key)
+    if test is None:
+        return
+
+    loss    = args.loss       if args.loss       is not None else test["packet_loss"]
+    corrupt = args.corruption if args.corruption is not None else test["packet_corrupt"]
+    dup     = args.duplicate  if args.duplicate  is not None else test["packet_duplicate"]
+
+    loss_s    = str(loss)    + '%'
+    corrupt_s = str(corrupt) + '%'
+    dup_s     = str(dup)     + '%'
+
+    if transport == "rdma":
+        for iface in [VETH_RDMA0, VETH_RDMA1]:
+            cmd(f"/usr/sbin/tc qdisc change dev {iface} root netem "
+                f"corrupt {corrupt_s} loss {loss_s} duplicate {dup_s}")
+    else:
+        for net, iface in [(NET0, VETH0), (NET1, VETH1)]:
+            ip(f"netns exec {net} /usr/sbin/tc qdisc change dev {iface} root netem "
+               f"corrupt {corrupt_s} loss {loss_s} duplicate {dup_s}")
 
 def teardown_rdma():
     """
@@ -250,19 +348,20 @@ parser.add_argument("-T", "--transport", default="tcp",
                          "tcp, rdma, or tcp,rdma.  Each matching test "
                          "is run once per transport.  "
                          "'rdma' requires CONFIG_RDS_RDMA and rdma_rxe.")
+parser.add_argument("-s", "--tests", default="",
+                    help="Comma-separated test selector: numbers (1), "
+                         "ranges (1-3), or tags (basic,stress). "
+                         "Default: run every discovered test.")
 parser.add_argument('-t', '--timeout', help="timeout to terminate hung test",
-                    type=int, default=0)
-parser.add_argument('-l', '--loss', help="Simulate tcp packet loss",
-                    type=int, default=0)
-parser.add_argument('-c', '--corruption', help="Simulate tcp packet corruption",
-                    type=int, default=0)
-parser.add_argument('-u', '--duplicate', help="Simulate tcp packet duplication",
-                    type=int, default=0)
+                    type=int, default=None)
+parser.add_argument('-l', '--loss', help="Simulate packet loss (%%)",
+                    type=int, default=None)
+parser.add_argument('-c', '--corruption', help="Simulate packet corruption (%%)",
+                    type=int, default=None)
+parser.add_argument('-u', '--duplicate', help="Simulate packet duplication (%%)",
+                    type=int, default=None)
 args = parser.parse_args()
 logdir=args.logdir
-PACKET_LOSS=str(args.loss)+'%'
-PACKET_CORRUPTION=str(args.corruption)+'%'
-PACKET_DUPLICATE=str(args.duplicate)+'%'
 
 # check transport is either tcp or rdma
 transports = [t.strip() for t in args.transport.split(',')]
@@ -297,30 +396,85 @@ if 'rdma' in transports:
         'flags': FLAGS | OP_FLAG_RDMA,
     }
 
+# find all tests to run
+test_keys = parse_selector(args.tests)
+
+# kselftest SKIP exit code
+SKIP_RC = 4
+
+# Build the runnable list across all key + transport combinations
+to_run = []
+for transport in transports:
+    for key in all_tests:
+        if key not in test_keys:
+            continue
+
+        test = all_tests[key]
+        if transport not in test["transports"]:
+            continue
+
+        to_run.append((transport, key))
+
+# Print list of target tests for proper TAP output
 print("TAP version 13")
-print(f"1..{len(transport_envs)}")
+print(f"1..{len(to_run)}")
 
-for transport, tenv in transport_envs.items():
+test_mods = {}
+for transport, key in to_run:
     tap_idx += 1
-    # add a timeout
-    if args.timeout > 0:
-        signal_handler_label = transport
-        signal.alarm(args.timeout)
+    test = all_tests[key]
+
+    fname = test["file"].removesuffix(".py")
+    if fname not in test_mods:
+        test_mods[fname] = importlib.import_module(tests_dir+"."+fname)
+
+    mod = test_mods[fname]
+
+    label = f"rds.{key}-{fname}.{transport}"
+    set_test_params(key, args, transport)
+
+    # Shift ports between tests so a lingering TIME_WAIT from the
+    # previous test cannot collide with the next one.
+    # Also helps to distinguish test traffic in network dumps
+    transport_envs[transport]['addrs'] = increment_ports(
+        transport_envs[transport]['addrs'], 1000)
+    env = dict(transport_envs[transport])
+    env['num_packets'] = test.get('num_packets', 50000)
+
+    # Per-test timeout
+    # If user passed a command-line time out use it
+    # Otherwise use the timeout from the test profile if available
+    # if none of the above is provided, then no alarm.
+    signal_timeout = (args.timeout if args.timeout is not None
+                      else test.get("timeout", 0))
+    if signal_timeout > 0:
+        signal_handler_label = label
         signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(signal_timeout)
 
-    rds_basic = importlib.import_module(tests_dir+".001-basic")
-    ret = rds_basic.run_test(tenv)
-
-    # cancel timeout
-    signal.alarm(0)
-
-    if ret == 0:
-        ksft_pr("Success")
-        print(f"ok {tap_idx} rds selftest {transport}")
-        nr_pass += 1
-    else:
-        print(f"not ok {tap_idx} rds selftest {transport}")
+    ksft_pr(f"RUN: {label}")
+    try:
+        rc = mod.run_test(env)
+    except RdsSkipEx as e:
+        print(f"ok {tap_idx} {label} # SKIP {e}")
+        nr_skip += 1
+        continue
+    finally:
+        signal.alarm(0)
+    if rc == SKIP_RC:
+        print(f"ok {tap_idx} {label} # SKIP reported by test")
+        nr_skip += 1
+    elif rc != 0:
+        print(f"not ok {tap_idx} {label}")
         nr_fail += 1
+    else:
+        print(f"ok {tap_idx} {label}")
+        nr_pass += 1
 
-ksft_pr(f"Totals: pass:{nr_pass} fail:{nr_fail} skip:0")
-sys.exit(1 if nr_fail else 0)
+ksft_pr(f"Totals: pass:{nr_pass} fail:{nr_fail} skip:{nr_skip}")
+if nr_fail > 0:
+    sys.exit(1)
+elif nr_pass == 0:
+    sys.exit(SKIP_RC)
+else:
+    sys.exit(0)

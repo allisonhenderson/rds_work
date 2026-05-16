@@ -206,9 +206,10 @@ LOG_DIR="${RDS_LOG_DIR:-}"
 TIMEOUT=$timeout
 GENERATE_GCOV_REPORT=1
 TRANSPORT=tcp
+TEST_SELECT="1"
 FLAGS=()
 
-while getopts "d:l:c:u:t:T:" opt; do
+while getopts "d:l:c:u:t:T:s:" opt; do
   case ${opt} in
     d)
       LOG_DIR=${OPTARG}
@@ -225,13 +226,16 @@ while getopts "d:l:c:u:t:T:" opt; do
     u)
       FLAGS+=("-u" "${OPTARG}")
       ;;
+    s)
+      TEST_SELECT=${OPTARG}
+      ;;
     T)
       TRANSPORT=${OPTARG}
       ;;
     :)
       echo "USAGE: rds_run.sh [-d logdir] [-l packet_loss]" \
            "[-c packet_corruption] [-u packet_duplicate] [-t timeout]" \
-           "[-T tcp|rdma|tcp,rdma]"
+           "[-T tcp|rdma|tcp,rdma] [-s selector]"
       exit 1
       ;;
     ?)
@@ -250,7 +254,7 @@ for t in "${transports[@]}"; do
     fi
 done
 
-FLAGS+=("--transport" "${TRANSPORT}")
+FLAGS+=("--transport" "${TRANSPORT}" "-s" "${TEST_SELECT}" "-t" "${TIMEOUT}")
 
 check_env
 check_conf
@@ -279,7 +283,7 @@ fi
 
 set +e
 echo "# running RDS tests..."
-"${TRACE_CMD[@]}" python3 "$(dirname "$0")/test.py" "${FLAGS[@]}" -t "$TIMEOUT"
+"${TRACE_CMD[@]}" python3 "$(dirname "$0")/test.py" "${FLAGS[@]}"
 
 test_rc=$?
 
