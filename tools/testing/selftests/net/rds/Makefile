@@ -8,7 +8,9 @@ TEST_PROGS := rds_run.sh
 TEST_GEN_PROGS := getsockopt
 
 TEST_FILES := \
+	tests/001-basic.py \
 	include.sh \
+	rds_common.py \
 	settings \
 	test.py \
 # end of TEST_FILES
