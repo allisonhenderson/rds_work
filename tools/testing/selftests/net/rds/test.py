@@ -440,6 +440,8 @@ for transport, key in to_run:
         transport_envs[transport]['addrs'], 1000)
     env = dict(transport_envs[transport])
     env['num_packets'] = test.get('num_packets', 50000)
+    env['peer1_reset_interval'] = test.get('peer1_reset_interval', 0)
+    env['peer2_reset_interval'] = test.get('peer2_reset_interval', 0)
 
     # Per-test timeout
     # If user passed a command-line time out use it

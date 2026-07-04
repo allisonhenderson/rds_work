@@ -201,6 +201,8 @@ def run_test(env):
     nr_send = 0
     nr_recv = 0
 
+    start_reset_procs(env, addrs, netns_list)
+
     while nr_send < num_packets:
 
         # Send as much as we can without blocking
@@ -218,6 +220,7 @@ def run_test(env):
                 ip(f"netns exec {net} /usr/sbin/sysctl net.rds.tcp.rds_tcp_rcvbuf=10000")
                 ip(f"netns exec {net} /usr/sbin/sysctl net.rds.tcp.rds_tcp_sndbuf=10000")
 
+    stop_reset_procs()
     ksft_pr("done", nr_send, nr_recv)
 
     check_info(sockets)

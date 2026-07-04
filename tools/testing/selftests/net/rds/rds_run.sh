@@ -282,6 +282,14 @@ if [[ -n "$LOG_DIR" ]]; then
 fi
 
 set +e
+
+# The reset testcases drive the per-conn debugfs "reset" files while the
+# test is running, so debugfs must be mounted before the test starts (the
+# gcov-collection step below also relies on it, but that runs too late).
+if ! mountpoint -q /sys/kernel/debug 2>/dev/null; then
+	mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
+fi
+
 echo "# running RDS tests..."
 "${TRACE_CMD[@]}" python3 "$(dirname "$0")/test.py" "${FLAGS[@]}"
 
