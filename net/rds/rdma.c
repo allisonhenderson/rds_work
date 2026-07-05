@@ -117,6 +117,7 @@ void __rds_put_mr_final(struct kref *kref)
 	struct rds_mr *mr = container_of(kref, struct rds_mr, r_kref);
 
 	rds_destroy_mr(mr);
+	sock_put(rds_rs_to_sk(mr->r_sock));
 	kfree(mr);
 }
 
@@ -243,7 +244,11 @@ static int __rds_rdma_map(struct rds_sock *rs, struct rds_get_mr_args *args,
 	kref_init(&mr->r_kref);
 	RB_CLEAR_NODE(&mr->r_rb_node);
 	mr->r_trans = rs->rs_transport;
+	/* The MR can outlive its socket: a socket reference is held
+	 * until the final kref is dropped in __rds_put_mr_final().
+	 */
 	mr->r_sock = rs;
+	sock_hold(rds_rs_to_sk(rs));
 
 	if (args->flags & RDS_RDMA_USE_ONCE)
 		mr->r_use_once = 1;
@@ -755,6 +760,10 @@ int rds_cmsg_rdma_args(struct rds_sock *rs, struct rds_message *rm,
 			}
 			rdsdebug("Need odp; local_odp_mr %p trans_private %p\n",
 				 local_odp_mr, local_odp_mr->r_trans_private);
+			/* From here on the MR is torn down through
+			 * __rds_put_mr_final(), which drops this reference.
+			 */
+			sock_hold(rds_rs_to_sk(rs));
 			op->op_odp_mr = local_odp_mr;
 			op->op_odp_addr = iov->addr;
 		}
