@@ -65,9 +65,17 @@ def send_burst(socks, ip_addrs, snd_hashes, nr_sent, nr_total):
     while nr_sent < nr_total:
         data = hashlib.sha256(
             f'packet {nr_sent}'.encode('utf-8')).hexdigest().encode('utf-8')
-        # pseudo-random send/receive pattern
+        # Alternate the sending socket, always sending to the peer.
+        # The previous pseudo-random pattern made half the messages
+        # SELF-sends (snd == rcv), which with SO_RDS_TRANSPORT pinned
+        # creates RDS-IB self-connections; those double the QP count
+        # per soft-RoCE device and expose an rxe QPN-reuse packet
+        # injection issue under connection resets (messages from one
+        # connection re-delivered into another).  Keep the traffic
+        # strictly cross-socket so the reset tests exercise RDS
+        # reconnect behavior rather than the rxe device limits.
         snd_idx = nr_sent % 2
-        rcv_idx = 1 - (nr_sent % 3) % 2
+        rcv_idx = 1 - snd_idx
 
         snd = socks[snd_idx]
         rcv = socks[rcv_idx]
