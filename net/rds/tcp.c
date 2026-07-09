@@ -178,6 +178,11 @@ void rds_tcp_reset_callbacks(struct socket *sock,
 	sock_release(osock);
 newsock:
 	rds_send_path_reset(cp);
+	/* This reconnect bypasses rds_conn_path_reset(); if the new sock is
+	 * from a restarted peer, the first message accepted on it may
+	 * legitimately rewind cp_next_rx_seq.
+	 */
+	set_bit(RDS_RX_REWIND_ALLOWED, &cp->cp_flags);
 	lock_sock(sock->sk);
 	rds_tcp_set_callbacks(sock, cp);
 	release_sock(sock->sk);

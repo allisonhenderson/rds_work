@@ -322,6 +322,7 @@ void rds_recv_incoming(struct rds_connection *conn, struct in6_addr *saddr,
 	struct sock *sk;
 	unsigned long flags;
 	struct rds_conn_path *cp;
+	u64 seq;
 
 	inc->i_conn = conn;
 	inc->i_rx_jiffies = jiffies;
@@ -361,12 +362,27 @@ void rds_recv_incoming(struct rds_connection *conn, struct in6_addr *saddr,
 	 * XXX we could spend more on the wire to get more robust failure
 	 * detection, arguably worth it to avoid data corruption.
 	 */
-	if (be64_to_cpu(inc->i_hdr.h_sequence) < cp->cp_next_rx_seq &&
-	    (inc->i_hdr.h_flags & RDS_FLAG_RETRANSMITTED)) {
-		rds_stats_inc(s_recv_drop_old_seq);
-		goto out;
+	seq = be64_to_cpu(inc->i_hdr.h_sequence);
+	if (seq < cp->cp_next_rx_seq) {
+		/* An old sequence number is only legitimate as the first
+		 * message accepted since the path was (re-)established: the
+		 * peer restarted and is numbering a fresh stream, so follow
+		 * it backwards.  Flagged retransmits of the old stream, and
+		 * anything claiming an old sequence number mid-stream (a
+		 * duplicated or misdirected packet), must be dropped -
+		 * accepting the latter would also drag cp_next_rx_seq
+		 * backwards, letting the retransmitted window behind it
+		 * evade this check entirely.
+		 */
+		if ((inc->i_hdr.h_flags & RDS_FLAG_RETRANSMITTED) ||
+		    !test_and_clear_bit(RDS_RX_REWIND_ALLOWED, &cp->cp_flags)) {
+			rds_stats_inc(s_recv_drop_old_seq);
+			goto out;
+		}
+	} else if (test_bit(RDS_RX_REWIND_ALLOWED, &cp->cp_flags)) {
+		clear_bit(RDS_RX_REWIND_ALLOWED, &cp->cp_flags);
 	}
-	cp->cp_next_rx_seq = be64_to_cpu(inc->i_hdr.h_sequence) + 1;
+	cp->cp_next_rx_seq = seq + 1;
 
 	if (rds_sysctl_ping_enable && inc->i_hdr.h_dport == 0) {
 		if (inc->i_hdr.h_sport == 0) {

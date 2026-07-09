@@ -137,6 +137,13 @@ static void rds_conn_path_reset(struct rds_conn_path *cp)
 	 * retransmitted packets from new packets, and will hand all
 	 * of them to the application. That is not consistent with the
 	 * reliability guarantees of RDS. */
+
+	/* But if the peer restarts before this path reconnects, its first
+	 * message will carry a sequence number from a fresh stream.  Allow
+	 * the next accepted message - and only that one - to move
+	 * cp_next_rx_seq backwards.
+	 */
+	set_bit(RDS_RX_REWIND_ALLOWED, &cp->cp_flags);
 }
 
 static void __rds_conn_path_init(struct rds_connection *conn,
