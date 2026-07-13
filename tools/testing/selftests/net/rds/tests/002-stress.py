@@ -75,7 +75,15 @@ def run_test(env):
 
     time_out = 60
 
-    if flags & OP_FLAG_RDMA:
-        return _run_stress(addrs[0][0], addrs[1][0], addrs[0][1], time_out)
-    return _run_stress(addrs[0][0], addrs[1][0], addrs[0][1], time_out,
-                       ns0=netns[0], ns1=netns[1])
+    start_reset_procs(env, addrs, netns)
+
+    try:
+        if flags & OP_FLAG_RDMA:
+            rc = _run_stress(addrs[0][0], addrs[1][0], addrs[0][1], time_out)
+        else:
+            rc = _run_stress(addrs[0][0], addrs[1][0], addrs[0][1], time_out,
+                             ns0=netns[0], ns1=netns[1])
+    finally:
+        stop_reset_procs()
+
+    return rc
