@@ -150,4 +150,13 @@ all_tests = {
         "packet_duplicate": 5,
         "num_packets": 10000,
     },
+    "2.0": {
+        "file": "002-stress.py",
+        "tags": {"stress"},
+        "transports": {"tcp", "rdma"},
+        "timeout": TEST_TIMEOUT,
+        "packet_loss": 0,
+        "packet_corrupt": 0,
+        "packet_duplicate": 0,
+    },
 }

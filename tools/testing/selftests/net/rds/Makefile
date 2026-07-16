@@ -9,6 +9,7 @@ TEST_GEN_PROGS := getsockopt
 
 TEST_FILES := \
 	tests/001-basic.py \
+	tests/002-stress.py \
 	include.sh \
 	rds_common.py \
 	settings \
